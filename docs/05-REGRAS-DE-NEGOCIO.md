@@ -78,7 +78,7 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
   1. **Duração Relativa:** A restrição temporal é sempre de 4 horas a partir do evento de bloqueio ($t_{\text{unlock}}$).
   2. **Independência entre Ciclo Contábil e Ciclo de Bloqueio:** A virada de dia às `00:00:00` do servidor NÃO afeta $t_{\text{unlock}}$. Bloqueio acionado às `23:30` tem $t_{\text{unlock}} = \text{03:30}$ do dia seguinte.
   3. **Condição Necessária vs. Suficiente:** O cumprimento da janela temporal mínima $[t_{\text{trigger}}, t_{\text{unlock}})$ é condição necessária para liberação, mas a reabertura efetiva ($t_{\text{reopen}} \ge t_{\text{unlock}}$) requer a ausência de condições de proteção ativas.
-* **Rastreabilidade:** [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+* **Rastreabilidade:** [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [11-MAQUINA-DE-ESTADOS.md](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md).
 
 ### RN-008 — Nova Janela Operacional e Baseline de Reabertura
 * **Enunciado:** Ao atingir as condições de liberação em $t_{\text{reopen}}$ (com $t_{\text{reopen}} \ge t_{\text{unlock}}$), o evento de bloqueio é encerrado, o sistema remove a trava e **inicia uma nova janela operacional de proteção intradiária** $J_n$ ($n \ge 1$).
@@ -91,19 +91,20 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
   4. A proteção na nova janela observará novas perdas incorridas a partir do momento da liberação:
      $$W_n(t) \le -L$$
   5. Se o bloqueio tiver cruzado a meia-noite, a baseline da reabertura é calculada sobre a contabilidade do novo dia operacional no instante efetivo da reabertura ($B_{\text{new}} = D_{\text{novo\_dia}}(t_{\text{reopen}})$).
-* **Rastreabilidade:** [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
+* **Rastreabilidade:** [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [11-MAQUINA-DE-ESTADOS.md](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md).
 
 ---
 
 ## 8. Regras de Tratamento de Falhas
 
-### RN-009 — Resiliência Operacional e Manutenção do Estado de Proteção
-* **Enunciado:** A falha no fechamento de uma posição individual (por mercado fechado, rejeição ou falta de liquidez) não autoriza a interrupção do EA nem o retorno da conta ao estado nominal.
+### RN-009 — Resiliência Operacional e Manutenção do Estado de Liquidação/Proteção
+* **Enunciado:** A falha no fechamento de uma posição individual (por mercado fechado, rejeição ou falta de liquidez) não autoriza a interrupção do EA, o avanço indevido para bloqueio passivo nem o retorno da conta ao estado nominal.
 * **Comportamento:**
   1. A falha é registrada detalhadamente no Diário do MT5 (`ticket`, código de retorno, motivo).
   2. As demais posições e ordens pendentes continuam sendo processadas normalmente.
-  3. **Enquanto houver posições que deveriam ter sido liquidadas ativas na conta, o sistema permanece em estado de proteção/bloqueio ativo**, sem transitar para monitoramento normal.
-* **Rastreabilidade:** [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004), Decisão D16.
+  3. **Enquanto houver posições ou ordens que deveriam ter sido neutralizadas ativas na conta, o sistema permanece estritamente em `LIQUIDATING`**, persistindo nas retentativas de encerramento. A transição para `BLOCKED` exige neutralização de 100% da exposição (resíduo zero). Em hipótese alguma o sistema transita para monitoramento nominal com pendências residuais.
+  4. O relógio de 4 horas contínuas ($t_{\text{unlock}} = t_{\text{trigger}} + 14.400\text{s}$) corre soberanamente durante a retenção em `LIQUIDATING`.
+* **Rastreabilidade:** [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004), Decisão D16, [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md).
 
 ---
 

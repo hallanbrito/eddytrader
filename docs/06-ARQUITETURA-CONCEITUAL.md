@@ -77,56 +77,42 @@ graph TD
 
 ## 3. Máquina de Estados Conceitual
 
-O comportamento operacional do EddyTrader é governado por cinco estados formais:
+O comportamento operacional do EddyTrader é governado por seis estados conceituais normativos formalizados integralmente em [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md):
 
 ```mermaid
 stateDiagram-v2
-    [*] --> MONITORING : Inicialização regular (OnInit)
+    [*] --> INIT : Inicialização / Restart
     
-    state MONITORING {
-        [*] --> VigilanciaAtiva
-        VigilanciaAtiva --> CalculoRisco : Tick / Timer
-        CalculoRisco --> VigilanciaAtiva : Perda < Limite
-    }
+    INIT --> MONITORING : Estado reconstruído limpo (J0/B0 ou Jn/Bn restaurados)
+    INIT --> BLOCKED : Bloqueio ativo (t < t_unlock OU safe_to_reopen == false)
+    INIT --> REOPENING : Proteção vencida (t >= t_unlock, resíduo 0 e safe_to_reopen)
+    INIT --> LIQUIDATING : Exposição residual a neutralizar (precedência)
 
-    MONITORING --> LIQUIDATING : Perda Relevante >= Limite Configurado
+    MONITORING --> PROTECTION_TRIGGERED : Perda da janela W_n(t) <= -L
     
-    state LIQUIDATING {
-        [*] --> FecharPosicoes
-        FecharPosicoes --> CancelarOrdens : Varredura completa
-        CancelarOrdens --> AvaliarPendencias
-        AvaliarPendencias --> ConcluidoSucesso : Todas encerradas
-        AvaliarPendencias --> ReterProtecao : Restaram falhas
-    }
-
-    LIQUIDATING --> BLOCKED : Todas encerradas OU proteção retida por falha
+    PROTECTION_TRIGGERED --> LIQUIDATING : Registrar t_trigger e t_unlock
     
-    state BLOCKED {
-        [*] --> ExibirStatusBloqueio
-        ExibirStatusBloqueio --> ManterBloqueio : Tick / Timer
-        ManterBloqueio --> ExibirStatusBloqueio : Servidor < t_bloqueio + 4h
-        ManterBloqueio --> PreservarViradaDia : 00:00 alcançado (bloqueio de 4h continua ativo)
-        PreservarViradaDia --> ExibirStatusBloqueio
-    }
-
-    BLOCKED --> UNBLOCKING : Servidor >= t_bloqueio + 4h
+    LIQUIDATING --> LIQUIDATING : Retentativa / Exposição residual
+    LIQUIDATING --> BLOCKED : Exposição 100% neutralizada (resíduo zero)
     
-    state UNBLOCKING {
-        [*] --> RemoverBloqueio
-        RemoverBloqueio --> EstabelecerBaseline : Registrar baseline_de_reabertura
-        EstabelecerBaseline --> ExibirLiberacao : Notificar operador
-        ExibirLiberacao --> [*]
-    }
+    BLOCKED --> BLOCKED : t < t_unlock OU safe_to_reopen == false
+    BLOCKED --> REOPENING : t >= t_unlock AND safe_to_reopen == true
 
-    UNBLOCKING --> MONITORING : Iniciar nova janela operacional
+    REOPENING --> MONITORING : Registrar baseline B_n e zerar janela
 ```
 
 ### 3.1. Transições Críticas Detalhadas
 
-1. **`MONITORING` $\to$ `LIQUIDATING`:** Disparada imediatamente quando o resultado financeiro atinge ou supera o limite negativo da janela.
-2. **`LIQUIDATING` $\to$ `BLOCKED`:** Se todas as ordens e posições forem tratadas, entra em bloqueio. Se houver falhas de fechamento em ativos específicos, o sistema **não retorna a monitoramento normal**; transita para bloqueio/contenção retida até que todas as pendências sejam resolvidas.
-3. **`BLOCKED` $\to$ `UNBLOCKING`:** Ocorre estritamente quando o relógio do servidor alcança o término das 4 horas contínuas ($t \ge t_{\text{unlock}}$, onde $t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$). A passagem pelas `00:00:00` não desarma o bloqueio ativo, mantendo a proteção integral até o término das 4 horas.
-4. **`UNBLOCKING` $\to$ `MONITORING`:** Ocorre no instante da reabertura efetiva $t_{\text{reopen}} \ge t_{\text{unlock}}$ assim que satisfeitas todas as condições de segurança (ausência de pendências residuais). Encerra o evento de bloqueio, calcula a `baseline_de_reabertura` ($B_n = D(t_{\text{reopen}, n})$) para evitar falso rebloqueio imediato no mesmo tick e reabre o monitoramento para novas perdas na nova janela.
+1. **`INIT` $\to$ `MONITORING` / `BLOCKED` / `REOPENING` / `LIQUIDATING`:** Ponto de entrada obrigatório. O sistema inspeciona registros e histórico sob ordem hierárquica estrita:
+   * Se dados insuficientes ou baseline intradiária irrecuperável $\implies$ retém em `INIT` (`safe_to_operate = false`, postura *fail-closed* sem fallback para zero);
+   * Se houver exposição residual que deveria ter sido eliminada $\implies$ transita para `LIQUIDATING` (precedência absoluta de contenção);
+   * Se houver proteção ativa com $t < t_{\text{unlock}}$ e resíduo zero $\implies$ transita para `BLOCKED` preservando $t_{\text{trigger}}$ e $t_{\text{unlock}}$;
+   * Se houver proteção pendente com $t \ge t_{\text{unlock}}$ e resíduo zero $\implies$ transita para `BLOCKED` se `safe_to_reopen == false`, ou diretamente para `REOPENING` se `safe_to_reopen == true` (sendo terminantemente proibido pular para `MONITORING`);
+   * Se estado for nominal sem proteção pendente $\implies$ transita para `MONITORING` (estabelecendo $B_0 \gets 0$ se primeira janela ou restaurando $B_n$ intradiário).
+2. **`MONITORING` $\to$ `PROTECTION_TRIGGERED` $\to$ `LIQUIDATING`:** Disparada imediatamente quando $W_n(t) \le -L$. Congela o contexto, registra $t_{\text{trigger}}$, calcula $t_{\text{unlock}} = t_{\text{trigger}} + 14.400\text{s}$ e comanda a liquidação compulsória integral.
+3. **`LIQUIDATING` $\to$ `LIQUIDATING` / `BLOCKED`:** Enquanto existir qualquer posição aberta ou ordem pendente a ser neutralizada, o sistema **permanece estritamente em `LIQUIDATING`**, persistindo nas tentativas de encerramento. A transição para `BLOCKED` ocorre única e exclusivamente após a neutralização de 100% da exposição (resíduo zero). O relógio de 4 horas ($t_{\text{unlock}}$) corre continuamente durante `LIQUIDATING`.
+4. **`BLOCKED` $\to$ `REOPENING`:** Ocorre estritamente quando duas condições são simultaneamente satisfeitas: decurso das 4 horas contínuas ($t \ge t_{\text{unlock}}$) e segurança operacional atestada (`safe_to_reopen == true`). A virada de `00:00:00` não cancela o bloqueio.
+5. **`REOPENING` $\to$ `MONITORING`:** Encerra formalmente o evento de bloqueio em $t_{\text{reopen}} \ge t_{\text{unlock}}$, estabelece a baseline $B_{n+1} = D(t_{\text{reopen}})$ garantindo $W_{n+1}(t_{\text{reopen}}) = 0$, e reabre o monitoramento contra novas perdas na nova janela.
 
 ---
 
@@ -136,7 +122,7 @@ A decisão arquitetural de produto para o MVP ([D12](file:///C:/Projetos/eddytra
 
 * **Prioridade Absoluta:** O EA deve reconstruir seu estado a partir dos registros contábeis nativos da conta e do histórico do terminal MT5 sempre que possível.
 * **Racional (KISS / YAGNI):** Evitar arquivos proprietários duplicados no disco reduz pontos de falha, corrupção de dados e complexidade operacional.
-* **Delimitação da W03:** A modelagem matemática comprovou que na primeira janela ($J_0$), a reconstrução é puramente determinística via histórico nativo ($B_0 = 0$). Contudo, em reinicialização durante bloqueio ativo ou janelas subsequentes ($J_n$ com $n \ge 1$), o sistema necessita que as variáveis mínimas de estado — em especial $(t_{\text{trigger}}, t_{\text{unlock}})$, $B_n$ e o estado operacional ativo — estejam disponíveis ou sejam reconstituídas de forma confiável. A viabilidade de inferir essas variáveis unívoca e exclusivamente a partir dos dados nativos do terminal MT5 sem persistência auxiliar ainda não foi validada empiricamente, permanecendo como questão aberta pendente de spike técnico (GAP-005). O modelo formal de dados e sua arquitetura de transição serão detalhados na FSM da W04.
+* **Delimitação da W04:** A especificação normativa da FSM formalizou com exatidão o conjunto mínimo de dados conceituais necessários para a recuperação determinística: $\mathbf{D}_{\text{min\_recovery}} = \{ \text{current\_state}, \text{protection\_event\_id}, J_n, B_n, t_{\text{trigger}}, t_{\text{unlock}} \}$. A validação prática sobre a suficiência dos dados nativos do MT5 vs. necessidade de persistência leve auxiliar permanece encaminhada para o Spike Técnico da W05 ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistência-e-reconstrução-de-estado-após-reinicialização) e [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)).
 
 ---
 
@@ -162,5 +148,6 @@ Conforme mantido no catálogo de questões abertas ([DQ-001](file:///C:/Projetos
 * Casos de Uso: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
 * Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
+* Máquina de Estados Finita: [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md) e [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)
 * Planejamento Incremental: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)

@@ -10,9 +10,9 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W03 — Especificação Matemática da Perda e Janelas de Proteção`
-* **Status:** Concluída. Modelo algébrico determinístico de baseline de reabertura, resultado de janela $W_n(t) = D(t) - B_n$, invariantes contábeis e temporais formalizados normativamente via [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md) e [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md) segundo o **Método C.H.**
-* **Próxima Fase:** `W04 — Especificação Normativa da Máquina de Estados`.
+* **Fase:** `W04 — Especificação Normativa da Máquina de Estados`
+* **Status:** Concluída. FSM normativa estruturada em 6 estados conceituais (`INIT`, `MONITORING`, `PROTECTION_TRIGGERED`, `LIQUIDATING`, `BLOCKED`, `REOPENING`), guards determinísticos, catálogo de transições proibidas, invariantes de controle e protocolo de recuperação pós-restart formalizados via [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md) e [11-MAQUINA-DE-ESTADOS.md](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md) segundo o **Método C.H.**
+* **Próxima Fase:** `W05 — Spike Técnico MT5/MQL5 (Garantias e Bloqueio)`.
 * **Aviso Importante:** **Nesta fase não há código executável (`.mq5`, `.mqh`, `.ex5`), protótipos funcionais ou robôs operacionais neste repositório.** O desenvolvimento de código será realizado estritamente nas etapas futuras aprovadas.
 
 ---
@@ -41,11 +41,13 @@ Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/
 9. [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
 10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos Work Packages (W).
 11. [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md): Modelagem determinística da perda, janelas operacionais, baseline e invariantes.
+12. [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md): Modelagem determinística da FSM, catálogo de estados, guards, transições proibidas e recuperação pós-restart.
 
 ### Registros de Decisões Arquiteturais (ADRs)
 * [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)
 * [ADR 0002 — Composição da Perda Operacional](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
 * [ADR 0003 — Modelo Matemático de Janelas e Baseline](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
+* [ADR 0004 — Máquina de Estados e Recuperação](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)
 
 ---
 
