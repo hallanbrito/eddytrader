@@ -36,40 +36,41 @@ O EddyTrader resolve esse problema transferindo o poder de interrupção operaci
 
 ## 4. Fluxo Conceitual
 
-O ciclo de vida operacional do EddyTrader segue um fluxo contínuo e estrito:
+O ciclo de vida operacional do EddyTrader segue um fluxo contínuo e estrito baseado no horário oficial do servidor:
 
 ```mermaid
 flowchart TD
-    A["Início / Anexação do EA ao Gráfico"] --> B["Carregar Parâmetros (Limite de Perda e Horário de Desbloqueio)"]
+    A["Início / Anexação do EA ao Gráfico"] --> B["Carregar Parâmetros (Limite de Perda e Duração do Bloqueio: 4 Horas)"]
     B --> C["Estado: MONITORAMENTO"]
-    C --> D{"Prejuízo Acumulado Relevante >= Limite Configurado?"}
+    C --> D{"Prejuízo Relevante >= Limite Configurado?"}
     D -- Não --> E["Aguardar Próximo Tick / Intervalo de Tempo"] --> C
     D -- Sim --> F["Estado: LIQUIDAÇÃO E CANCELAMENTO"]
-    F --> G["Fechar Todas as Posições Abertas a Mercado"]
-    G --> H["Cancelar Todas as Ordens Pendentes"]
-    H --> I["Estado: BLOQUEADO"]
+    F --> G["Fechar Todas as Posições Abertas a Mercado (Conta Inteira)"]
+    G --> H["Cancelar Todas as Ordens Pendentes (Conta Inteira)"]
+    H --> I["Estado: BLOQUEADO (Período de 4 Horas)"]
     I --> J["Impedir Novas Negociações"]
-    I --> K["Apresentar Informação Visual de Bloqueio no Gráfico"]
-    I --> L{"Horário Atual >= Horário de Desbloqueio?"}
+    I --> K["Apresentar Informação Visual de Bloqueio no Gráfico (t_bloqueio e Previsão de Liberação)"]
+    I --> L{"Relógio do Servidor >= Instante de Liberação (t_bloqueio + 4h)?"}
     L -- Não --> I
     L -- Sim --> M["Estado: DESBLOQUEADO"]
     M --> N["Remover Bloqueio Operacional"]
-    N --> O["Apresentar Informação Visual de Liberação"]
-    O --> C
+    N --> O["Estabelecer Baseline de Reabertura (Nova Janela de Proteção)"]
+    O --> P["Apresentar Informação Visual de Liberação"]
+    P --> C
 ```
 
 ---
 
-## 5. Entradas Principais (Inputs)
+## 5. Entradas Principais e Regras Temporais
 
-O operador define diretamente nos parâmetros do Expert Advisor:
+O produto opera com os seguintes parâmetros normativos:
 
 1. **Limite Máximo de Perda Diária (`Daily Loss Limit`):**
    * Valor numérico monetário positivo (ex: `500.00`).
    * Expressa a quantidade monetária máxima (na moeda da conta) que o operador aceita perder no dia.
-2. **Horário de Desbloqueio (`Unlock Time`):**
-   * Horário no formato horário/minuto (ex: `16:00`).
-   * Define o momento em que a trava de bloqueio será desarmada e o monitoramento liberará novas operações.
+2. **Tempo de Bloqueio Operacional:**
+   * Duração contínua e relativa de **4 horas** a partir do instante exato de disparo da proteção ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$) no relógio do servidor de negociação.
+   * *(Nota: Substitui a interpretação preliminar de horário fixo absoluto diário)*.
 
 ---
 
@@ -79,11 +80,11 @@ Quando acionado, o EddyTrader gera as seguintes saídas e efeitos colaterais no 
 
 * **Ordens Comerciais de Fechamento:** ordens de fechamento a mercado para liquidar toda e qualquer posição aberta na conta.
 * **Ordens Comerciais de Cancelamento:** requisições de cancelamento para todas as ordens pendentes (*Buy Limit*, *Sell Limit*, *Buy Stop*, *Sell Stop*, etc.) ativas na conta.
-* **Imposição de Bloqueio:** impedimento de novas negociações durante a vigência da restrição.
+* **Imposição de Bloqueio:** impedimento de novas negociações durante a vigência do período de 4 horas.
 * **Apresentação Visual em Gráfico:** renderização de informações textuais claras diretamente no gráfico (HUD/Chart Comment) informando:
   * Motivo do bloqueio (limite atingido);
   * Posições e ordens processadas;
-  * Horário estipulado para retorno/liberação.
+  * Instante do acionamento e horário do servidor estipulado para retorno/liberação ($t_{\text{bloqueio}} + 4\text{h}$).
 * **Registro em Log Local:** mensagens estruturadas no Diário (*Journal*) do MetaTrader 5 para fins de auditoria e rastreabilidade temporal.
 
 ---
@@ -94,10 +95,10 @@ Conceitualmente, o sistema transita entre quatro estados essenciais:
 
 | Estado | Descrição | Comportamento Operacional |
 | :--- | :--- | :--- |
-| **`MONITORING`** | Estado nominal padrão de vigilância. | Lê continuamente o resultado da conta e compara com o limite de perda. Permite operações normais. |
+| **`MONITORING`** | Estado nominal padrão de vigilância. | Lê continuamente o resultado da conta e compara com o limite de perda da janela ativa. Permite operações normais. |
 | **`LIQUIDATING`** | Estado transitório de contenção de emergência. | Disparado imediatamente quando o limite é atingido. Executa fechamento de posições e cancelamento de ordens pendentes. |
-| **`BLOCKED`** | Estado de bloqueio ativo e proteção. | Impede ativamente novas operações e exibe aviso visual até que o horário de desbloqueio chegue. |
-| **`UNLOCKED`** | Estado transitório de liberação. | Remove as restrições de bloqueio, notifica a liberação no gráfico e retorna ao estado `MONITORING`. |
+| **`BLOCKED`** | Estado de bloqueio ativo e proteção. | Impede ativamente novas operações e exibe aviso visual durante o período contínuo de 4 horas ($[t_{\text{bloqueio}}, t_{\text{bloqueio}} + 4\text{h})$). |
+| **`UNLOCKED`** | Estado transitório de liberação. | Remove as restrições de bloqueio, estabelece a baseline de reabertura para evitar falso rebloqueio e retorna ao estado `MONITORING`. |
 
 ---
 
@@ -105,7 +106,7 @@ Conceitualmente, o sistema transita entre quatro estados essenciais:
 
 O EddyTrader opera nativamente dentro da infraestrutura do MetaTrader 5:
 
-* **Formato:** compilado exclusivamente como arquivo executável MQL5 (`.ex5`) derivado de código-fonte fonte MQL5 (`.mq5`).
+* **Formato:** compilado exclusivamente como arquivo executável MQL5 (`.ex5`) derivado de código-fonte MQL5 (`.mq5`).
 * **Instalação:** anexado a uma janela de gráfico (*chart*) de qualquer ativo financeiro disponível no terminal.
 * **Ciclo de Eventos:** acionado pelos eventos nativos da plataforma, tais como `OnInit()`, `OnDeinit()`, `OnTick()`, `OnTimer()`, e eventos de negociação como `OnTrade()` / `OnTradeTransaction()`.
 * **Subordinação à Corretora e Terminal:** toda ação de fechamento ou cancelamento está sujeita às regras da corretora (horário de negociação do símbolo, liquidez, requisições aceitas, modo de margem Hedging vs. Netting).
@@ -117,4 +118,6 @@ O EddyTrader opera nativamente dentro da infraestrutura do MetaTrader 5:
 * Origem: Especificação funcional aprovada (Contexto do Produto e Requisitos Funcionais).
 * Detalhamento de Fronteiras: [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md)
 * Detalhamento de Requisitos: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
+* Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
 * Arquitetura de Estados: [06 — Arquitetura Conceitual](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)

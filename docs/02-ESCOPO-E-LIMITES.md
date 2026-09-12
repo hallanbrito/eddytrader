@@ -10,7 +10,7 @@ As seguintes funcionalidades e características constituem o escopo autorizado d
 
 1. **Configuração de Parâmetros de Risco:**
    * Entrada parametrizada do valor monetário do limite diário de perda máxima.
-   * Entrada parametrizada do horário civil/servidor para desbloqueio das operações.
+   * Aplicação da regra temporal normativa de bloqueio contínuo por 4 horas a partir do acionamento da proteção.
 2. **Monitoramento Contínuo:**
    * Acompanhamento do resultado financeiro realizado no período diário.
    * Acompanhamento do resultado financeiro flutuante (*unrealized profit/loss*) de posições em aberto.
@@ -21,13 +21,13 @@ As seguintes funcionalidades e características constituem o escopo autorizado d
 4. **Imposição e Manutenção de Bloqueio:**
    * Entrada em estado de bloqueio operacional imediatamente após a liquidação.
    * Impedimento de que novas operações ocorram durante o período de bloqueio.
-   * Manutenção ininterrupta do bloqueio até o horário de desbloqueio configurado.
+   * Manutenção ininterrupta do bloqueio pelo período de 4 horas a partir do acionamento ($[t_{\text{bloqueio}}, t_{\text{bloqueio}} + 4\text{h})$).
 5. **Desbloqueio e Retomada:**
-   * Reconhecimento automático da chegada do horário configurado.
+   * Reconhecimento automático da conclusão das 4 horas contínuas de bloqueio no relógio do servidor.
    * Remoção do estado de bloqueio e liberação de novas operações.
-   * Retomada transparente do monitoramento contínuo.
+   * Retomada transparente do monitoramento contínuo em nova janela via baseline de reabertura.
 6. **Interface e Comunicação Local:**
-   * Exibição de informações visuais claras no gráfico do MetaTrader 5 indicando o estado atual, valores de limite, posições encerradas e horário de liberação.
+   * Exibição de informações visuais claras no gráfico do MetaTrader 5 indicando o estado atual, valores de limite, posições encerradas, instante do acionamento e previsão de liberação ($t_{\text{bloqueio}} + 4\text{h}$).
    * Registro sistemático de eventos, erros e ações defensivas no Diário (*Journal*) do MetaTrader 5.
 7. **Tratamento Resiliente de Erros:**
    * Registro detalhado de qualquer falha na tentativa de fechamento ou cancelamento de uma ordem/posição.

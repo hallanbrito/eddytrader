@@ -1,14 +1,14 @@
 # 04 — Casos de Uso do Sistema
 
-Este documento especifica os Casos de Uso (UC) do **EddyTrader**, detalhando a interação entre os atores envolvidos, as condições de disparo, os fluxos de sucesso e as rotinas de contingência.
+Este documento especifica os Casos de Uso (UC) do **EddyTrader**, detalhando os fluxos operacionais, regras de tempo do servidor, bloqueio contínuo de 4 horas, criação de novas janelas de proteção e contingência de falhas conforme as deliberações da **W02** (incluindo o esclarecimento normativo do Product Owner).
 
 ---
 
 ## 1. Atores do Sistema
 
-* **Operador (Trader):** Usuário humano que anexa o EA ao gráfico, configura os parâmetros de risco e realiza suas operações na conta.
-* **Sistema (EddyTrader EA):** Lógica executável em MQL5 em execução contínua no terminal MetaTrader 5.
-* **Terminal MetaTrader 5 / Servidor da Corretora:** Infraestrutura de execução que processa ordens, posições e dados de mercado e tempo.
+* **Operador (Trader):** Usuário que anexa o EA ao gráfico, define os parâmetros de risco e realiza suas operações na conta.
+* **Sistema (EddyTrader EA):** Instância única em MQL5 em execução contínua no terminal MetaTrader 5.
+* **Servidor de Negociação da Corretora:** Infraestrutura da corretora que fornece o relógio oficial do sistema (`TimeCurrent`), executa requisições e mantém o histórico contábil.
 
 ---
 
@@ -23,8 +23,8 @@ flowchart LR
     Sys --> UC03["UC-03: Acionar Proteção por Perda"]
     Sys --> UC04["UC-04: Encerrar Exposições e Ordens"]
     Sys --> UC05["UC-05: Manter Bloqueio Operacional"]
-    Sys --> UC07["UC-07: Liberar Operações no Horário"]
-    Sys --> UC08["UC-08: Tratar Falhas de Execução"]
+    Sys --> UC07["UC-07: Liberar Operações e Iniciar Nova Janela"]
+    Sys --> UC08["UC-08: Tratar Falhas e Reter Proteção"]
 ```
 
 ---
@@ -36,153 +36,154 @@ flowchart LR
 ### UC-01 — Configurar Parâmetros de Risco
 
 * **Ator Principal:** Operador.
-* **Objetivo:** Estabelecer o valor monetário da perda máxima tolerada e o horário para liberação das operações.
-* **Pré-condições:** Terminal MetaTrader 5 em execução com o gráfico aberto.
-* **Gatilho:** O operador anexa o EddyTrader a um gráfico ou abre as propriedades do EA (`F7`).
+* **Objetivo:** Estabelecer o limite monetário diário de perda e inicializar o sistema com o tempo de bloqueio de 4 horas aprovado.
+* **Pré-condições:** Terminal MT5 em execução com gráfico aberto.
+* **Gatilho:** O operador anexa o EddyTrader a um gráfico ou abre suas propriedades (`F7`).
 * **Fluxo Principal:**
-  1. O operador visualiza a janela de parâmetros de entrada (*Inputs*) do EA.
+  1. O operador visualiza os parâmetros de entrada (*Inputs*).
   2. O operador informa o valor do limite máximo de perda diária (ex: `500.00`).
-  3. O operador informa o horário de desbloqueio (ex: `16:00`).
+  3. O sistema adota a duração normativa aprovada de 4 horas contínuas de bloqueio a partir do instante do disparo ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$). *(Nota: A menção preliminar a horário fixo absoluto diário foi formalmente corrigida por esclarecimento de requisito do PO)*.
   4. O operador confirma as configurações pressionando "OK".
-  5. O sistema valida os valores fornecidos.
-  6. O sistema inicializa em estado `MONITORING`, exibindo os parâmetros ativos no gráfico e no log.
+  5. O sistema valida os valores fornecidos ($L > 0$).
+  6. O sistema inicializa em estado `MONITORING`, exibindo o limite de perda, o status operacional e o relógio oficial do servidor no gráfico.
 * **Exceções:**
-  * **E1 — Limite de perda inválido (<= 0):** O sistema alerta no log/gráfico sobre parâmetro inválido e impede a inicialização ou assume estado de alerta seguro sem habilitar proteção incoerente.
-  * **E2 — Formato de horário inválido:** O sistema alerta erro de formato e solicita correção.
-* **Pós-condições:** Parâmetros carregados na memória do EA e prontos para monitoramento.
-* **Requisitos Relacionados:** [RF-001](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-001), [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004).
+  * **E1 — Parâmetro inválido:** Limite $\le 0$ emite alerta no Diário e impede a ativação da proteção em modo inconsistente.
+* **Pós-condições:** Parâmetros carregados e prontos para monitoramento sob o relógio do servidor.
+* **Requisitos Relacionados:** [RF-001](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-001), [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RN-001](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-001), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ---
 
 ### UC-02 — Monitorar Resultado da Conta
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Acompanhar de forma ininterrupta o resultado realizado e flutuante relevante da conta.
+* **Objetivo:** Acompanhar de forma ininterrupta o resultado realizado do dia operacional e o resultado flutuante atual da conta.
 * **Pré-condições:** EA inicializado com sucesso em estado `MONITORING`.
-* **Gatilho:** Recepção de novo tick no gráfico (`OnTick`) ou disparo de ciclo temporizado (`OnTimer`).
+* **Gatilho:** Novo tick de mercado (`OnTick`) ou temporizador de alta frequência (`OnTimer`).
 * **Fluxo Principal:**
-  1. O sistema consulta as transações e negócios encerrados no período considerado do dia.
-  2. O sistema calcula a soma do resultado financeiro realizado.
-  3. O sistema varre todas as posições abertas na conta e lê o lucro/prejuízo flutuante consolidado.
-  4. O sistema calcula o prejuízo acumulado relevante.
-  5. O sistema compara o valor apurado com o limite de perda configurado.
-  6. Se o prejuízo for menor que o limite, o sistema atualiza as métricas no gráfico e permanece no estado `MONITORING`.
+  1. O sistema obtém o horário atual do servidor da corretora.
+  2. O sistema totaliza os negócios fechados no intervalo de `00:00:00` até o horário corrente do servidor, incluindo lucros/prejuízos brutos, comissões e swaps.
+  3. O sistema ignora qualquer transação de depósito, saque ou ajuste financeiro não oriundo de negociação.
+  4. O sistema varre todas as posições abertas na conta (incluindo posições carregadas de dias anteriores) e obtém o flutuante líquido atual.
+  5. O sistema calcula o $\text{RESULTADO\_RELEVANTE} = \text{Realizado} + \text{Flutuante}$ (ou novas perdas relativas à baseline ativa, caso esteja em nova janela pós-desbloqueio).
+  6. O sistema compara o valor com o limite de perda. Se não houver violação, atualiza o gráfico e permanece em `MONITORING`.
 * **Exceções:**
-  * **E1 — Histórico de negócios temporariamente indisponível:** O sistema registra aviso no log e retenta na próxima iteração sem alterar estado indevidamente.
-* **Pós-condições:** Nível de exposição e perda diária recalculados e atualizados.
-* **Requisitos Relacionados:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [RNF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-003), [RNF-006](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-006).
+  * **E1 — Falha transitória na consulta do histórico:** O sistema retenta no próximo evento sem corromper o estado atual.
+* **Pós-condições:** Métrica de perda atualizada com precisão líquida real.
+* **Requisitos Relacionados:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [RN-002](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-002), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md).
 
 ---
 
 ### UC-03 — Acionar Proteção por Perda
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Detectar a violação da regra de perda máxima e dar início imediato ao protocolo de emergência.
+* **Objetivo:** Reconhecer a violação da perda máxima e disparar compulsoriamente a liquidação e o cálculo da janela de 4 horas de bloqueio.
 * **Pré-condições:** Sistema em estado `MONITORING`.
-* **Gatilho:** O prejuízo apurado no ciclo de monitoramento torna-se igual ou superior ao limite diário (ex: perda acumulada de R$ 503,00 para limite de R$ 500,00).
+* **Gatilho:** A perda apurada atinge ou supera o limite monetário diário (ou o limite da janela operacional ativa).
 * **Fluxo Principal:**
-  1. O sistema identifica que a condição de limite foi violada.
-  2. O sistema registra em log o evento de violação contendo: saldo, perda realizada, flutuante, limite e horário exato.
-  3. O sistema transita imediatamente para o estado transitório de liquidação (`LIQUIDATING`).
-  4. O sistema invoca imediatamente o encerramento de exposições ([UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens)).
-* **Exceções:** Nenhuma. A violação exige disparo incondicional.
-* **Pós-condições:** Sistema em modo de contenção ativo (`LIQUIDATING`).
-* **Requisitos Relacionados:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004), [RNF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-005).
+  1. O sistema atesta que $\text{RESULTADO\_RELEVANTE} \le -\text{LIMITE\_CONFIGURADO}$.
+  2. O sistema carimba o instante oficial de acionamento da proteção no relógio do servidor:
+     $$T_0 = t_{\text{bloqueio}}$$
+  3. O sistema define a janela temporal contínua de bloqueio de 4 horas:
+     $$T_{\text{unlock}} = T_0 + 4\text{h}$$
+     O sistema deve permanecer no estado bloqueado no intervalo:
+     $$[T_0, T_{\text{unlock}})$$
+     e tornar-se elegível à liberação quando:
+     $$T \ge T_{\text{unlock}}$$
+  4. O sistema registra o evento de disparo no Diário do MT5 detalhando $T_0$ e $T_{\text{unlock}}$.
+  5. O sistema transita para o estado transitório `LIQUIDATING` e inicia [UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens).
+* **Pós-condições:** Sistema em modo de contenção ativo (`LIQUIDATING`) com janela temporal $[T_0, T_{\text{unlock}})$ formalizada.
+* **Requisitos Relacionados:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [RN-003](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-003), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ---
 
 ### UC-04 — Encerrar Exposições e Ordens
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Fechar todas as posições abertas e cancelar todas as ordens pendentes na conta.
+* **Objetivo:** Fechar todas as posições abertas e cancelar todas as ordens pendentes em escopo global da conta.
 * **Pré-condições:** Sistema em estado `LIQUIDATING`.
 * **Gatilho:** Disparo efetuado por [UC-03](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-03--acionar-protecao-por-perda).
 * **Fluxo Principal:**
-  1. O sistema enumera todas as posições atualmente abertas na conta.
-  2. Para cada posição, o sistema emite uma requisição de fechamento a mercado (`TRADE_ACTION_DEAL`).
-  3. O sistema enumera todas as ordens pendentes da conta.
-  4. Para cada ordem pendente, o sistema emite uma requisição de cancelamento (`TRADE_ACTION_REMOVE`).
-  5. O sistema confirma o processamento das ordens e posições.
-  6. O sistema transita para o estado `BLOCKED` ([UC-05](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-05--manter-bloqueio-operacional)).
+  1. O sistema varre 100% das posições abertas na conta (todos os símbolos e robôs).
+  2. Para cada posição, emite ordem de fechamento a mercado.
+  3. O sistema varre 100% das ordens pendentes na conta.
+  4. Para cada ordem pendente, emite solicitação de cancelamento.
+  5. Se todas as posições forem encerradas e ordens canceladas, o sistema transita para `BLOCKED` ([UC-05](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-05--manter-bloqueio-operacional)).
 * **Exceções:**
-  * **E1 — Falha no encerramento de posição específica:** Tratada em [UC-08](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-08--tratar-falhas-de-execucao).
-* **Pós-condições:** Posições abertas encerradas, ordens pendentes removidas e transição para o estado `BLOCKED`.
-* **Requisitos Relacionados:** [RF-006](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-006), [RF-007](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-007), [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013).
+  * **E1 — Falha no fechamento de uma posição individual:** Aciona [UC-08](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-08--tratar-falhas-e-reter-protecao).
+* **Pós-condições:** Conta limpa e desfeita de exposições; sistema no estado `BLOCKED`.
+* **Requisitos Relacionados:** [RF-006](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-006), [RF-007](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-007), [RN-004](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-004), [RN-005](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-005).
 
 ---
 
 ### UC-05 — Manter Bloqueio Operacional
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Garantir que novas operações não permaneçam ativas durante a vigência do bloqueio e manter o operador informado.
+* **Objetivo:** Manter a proteção ativa, impedir novas operações e gerenciar a transição temporal até a liberação após 4 horas.
 * **Pré-condições:** Conclusão da liquidação em [UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens).
 * **Gatilho:** Entrada no estado `BLOCKED`.
 * **Fluxo Principal:**
-  1. O sistema atualiza a interface visual no gráfico com mensagem contendo:
-     * Alerta explícito de que o limite de perda foi atingido.
-     * Confirmação de que todas as operações foram encerradas.
-     * Declaração de bloqueio de novas operações.
-     * Horário estipulado para a liberação.
-  2. O sistema permanece em vigilância estrita.
-  3. A cada verificação temporal, compara o horário atual com o horário de desbloqueio configurado.
-  4. Enquanto o horário atual for menor que o horário de liberação, mantém o estado `BLOCKED`.
+  1. O sistema renderiza mensagem no gráfico informando:
+     * Limite de perda violado;
+     * Operações encerradas;
+     * Bloqueio ativo;
+     * Horário do servidor em que ocorreu o bloqueio ($T_0$);
+     * Data e horário do servidor previstos para a liberação ($T_{\text{unlock}} = T_0 + 4\text{h}$).
+  2. O sistema acompanha continuamente o relógio do servidor dentro do intervalo $[T_0, T_{\text{unlock}})$.
+  3. **Comportamento na virada de dia:** A passagem de `00:00:00` não interfere na duração. Mesmo que um novo dia operacional comece enquanto o bloqueio estiver ativo, o bloqueio continua ininterruptamente até completar as 4 horas (ex: bloqueio às 23:30 permanece até 03:30 do dia seguinte).
+  4. Enquanto o relógio do servidor satisfizer $T < T_{\text{unlock}}$, o bloqueio prevalece de forma irrestrita.
 * **Exceções:**
-  * **E1 — Detecção de nova ordem/posição durante o bloqueio:** Caso nova ordem ou posição seja detectada durante o bloqueio, o sistema atua imediatamente para neutralizá-la (ver questão arquitetural em [06-ARQUITETURA-CONCEITUAL.md](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md)).
-* **Pós-condições:** Operações impedidas e interface do gráfico informando o bloqueio ativo.
-* **Requisitos Relacionados:** [RF-008](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-008), [RF-009](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-009).
+  * **E1 — Tentativa de operação durante o bloqueio:** Processada em [UC-06](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-06--tentar-operar-em-bloqueio).
+* **Pós-condições:** Bloqueio mantido até o instante oficial programado ($T \ge T_{\text{unlock}}$).
+* **Requisitos Relacionados:** [RF-008](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-008), [RF-009](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-009), [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [RN-006](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-006), [RN-007](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-007), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ---
 
 ### UC-06 — Tentar Operar em Bloqueio
 
-* **Ator Principal:** Operador (ou outro EA).
-* **Objetivo:** Tentar abrir nova posição enquanto a proteção diária estiver ativa.
-* **Pré-condições:** Sistema em estado `BLOCKED`.
-* **Gatilho:** O operador envia uma ordem manual ou outro robô emite uma ordem na conta.
+* **Ator Principal:** Operador (ou outro robô na conta).
+* **Objetivo:** Tentar abrir ordem ou posição durante vigência do bloqueio de 4 horas.
+* **Pré-condições:** Sistema no estado `BLOCKED` ($T \in [T_0, T_{\text{unlock}})$).
+* **Gatilho:** Submissão de ordem manual ou automática.
 * **Fluxo Principal:**
-  1. A tentativa de operação ocorre durante o período de bloqueio.
-  2. O sistema identifica a nova operação ou tentativa.
-  3. O sistema impede ou neutraliza a operação imediatamente, conforme capacidade técnica da plataforma MT5.
-  4. O sistema registra a violação da regra de bloqueio no diário do MT5.
-  5. O estado `BLOCKED` e o aviso visual permanecem ativos.
-* **Exceções:** Falhas técnicas de rejeição por mercado fechado tratadas em [UC-08](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-08--tratar-falhas-de-execucao).
+  1. Uma nova ordem ou posição surge na conta durante o bloqueio.
+  2. O sistema detecta a presença da ordem ou posição.
+  3. O sistema neutraliza ou fecha a operação imediatamente.
+  4. O sistema registra o evento de violação de bloqueio no Diário.
+  5. O estado `BLOCKED` permanece ativo.
 * **Pós-condições:** Conta preservada sem novas posições ativas.
-* **Requisitos Relacionados:** [RF-008](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-008), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004).
+* **Requisitos Relacionados:** [RF-008](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-008), [RN-006](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-006).
 
 ---
 
-### UC-07 — Liberar Operações no Horário
+### UC-07 — Liberar Operações e Iniciar Nova Janela
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Desarmar o bloqueio operacional e retornar a conta ao estado de vigilância regular.
-* **Pré-condições:** Sistema em estado `BLOCKED`.
-* **Gatilho:** O horário do terminal/servidor atinge ou ultrapassa o horário de desbloqueio configurado.
+* **Objetivo:** Desarmar a proteção temporal após completadas as 4 horas, permitir novas negociações e iniciar uma nova janela de monitoramento intradiário.
+* **Pré-condições:** Sistema no estado `BLOCKED`.
+* **Gatilho:** O relógio oficial do servidor alcança ou ultrapassa o instante de liberação ($T \ge T_{\text{unlock}}$, com $T_{\text{unlock}} = T_0 + 4\text{h}$).
 * **Fluxo Principal:**
-  1. O sistema detecta que o horário atual coincide ou superou o horário de desbloqueio.
-  2. O sistema registra o evento de liberação no log do terminal.
-  3. O sistema atualiza o gráfico com a mensagem: *"Bloqueio removido. Operações liberadas."*.
-  4. O sistema remove as travas de bloqueio.
-  5. O sistema transita para o estado `MONITORING`.
-  6. O monitoramento contínuo continua normalmente ([UC-02](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-02--monitorar-resultado-da-conta)).
-* **Exceções:** Nenhuma.
-* **Pós-condições:** Sistema liberado e monitorando ativamente.
-* **Requisitos Relacionados:** [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012).
+  1. O sistema constata que transcorreram 4 horas contínuas desde o bloqueio ($T \ge T_{\text{unlock}}$).
+  2. O sistema registra no Diário do MT5 a remoção do bloqueio.
+  3. O sistema atualiza o comentário do gráfico: *"Bloqueio removido. Operações liberadas."*.
+  4. O sistema encerra o evento de proteção anterior e **estabelece a `baseline_de_reabertura`** para a nova janela operacional (D09).
+  5. O sistema remove as travas de bloqueio e transita para `MONITORING`.
+  6. Novas perdas a partir da liberação passam a ser monitoradas frente ao limite configurado.
+* **Pós-condições:** Operações permitidas; nova janela operacional ativa sem rebloqueio instantâneo.
+* **Requisitos Relacionados:** [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [RN-007](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-007), [RN-008](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-008), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ---
 
-### UC-08 — Tratar Falhas de Execução
+### UC-08 — Tratar Falhas e Reter Proteção
 
 * **Ator Principal:** Sistema (EddyTrader EA).
-* **Objetivo:** Assegurar que falhas parciais ou recusas da corretora não travem o EA nem impeçam o encerramento das demais posições.
-* **Pré-condições:** Tentativa de fechamento ou cancelamento de ordem/posição rejeitada pelo servidor da corretora.
-* **Gatilho:** Retorno de erro comercial (ex: requote, mercado fechado, sem liquidez, preço alterado) durante [UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens).
+* **Objetivo:** Isolar erros pontuais de corretora sem abortar o EA e reter o estado de proteção enquanto houver posições não encerradas.
+* **Pré-condições:** Rejeição ou recusa da corretora ao tentar fechar posição ou cancelar ordem pendente.
+* **Gatilho:** Retorno de código de erro comercial (`retcode != TRADE_RETCODE_DONE`).
 * **Fluxo Principal:**
-  1. A chamada de fechamento/cancelamento retorna código de erro (`retcode != TRADE_RETCODE_DONE`).
-  2. O sistema captura o código e a mensagem de erro da plataforma.
-  3. O sistema registra detalhadamente no log a falha, o ticket da posição/ordem e o motivo retornado.
-  4. O sistema prossegue para a próxima posição ou ordem pendente da lista, sem abortar a rotina.
-  5. Caso restem pendências não encerradas, o sistema mantém tentativas programadas seguras.
-  6. O EA permanece ativo e íntegro.
-* **Exceções:** Falha generalizada de conexão com o terminal (o sistema tenta novamente assim que a conexão retornar).
-* **Pós-condições:** Falha devidamente auditada no Diário e demais posições processadas.
-* **Requisitos Relacionados:** [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013), [RNF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-004), [RNF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-005).
+  1. O sistema captura o erro, código de retorno e ticket da operação.
+  2. O sistema registra a falha com detalhes no Diário do terminal.
+  3. O sistema prossegue na varredura das demais posições e ordens pendentes.
+  4. **Se ao final do ciclo restarem posições abertas não encerradas, o sistema NÃO retorna ao estado nominal de monitoramento (`MONITORING`), permanecendo em estado de contingência/proteção ativa.**
+  5. O EA programa novas tentativas de fechamento nos próximos ciclos.
+* **Pós-condições:** Falhas auditadas, posições viáveis encerradas e estado defensivo retido até resolução das pendências.
+* **Requisitos Relacionados:** [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013), [RN-009](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-009), Decisão D16.

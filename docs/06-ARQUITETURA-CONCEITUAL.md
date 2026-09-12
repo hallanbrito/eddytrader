@@ -1,38 +1,39 @@
 # 06 — Arquitetura Conceitual do EddyTrader
 
-Este documento define a arquitetura conceitual e os blocos de responsabilidade do **EddyTrader**. Este documento é estritamente conceitual e normativo: **não define nem antecipa implementações de código MQL5 executável**.
+Este documento define a arquitetura conceitual e os blocos de responsabilidade do **EddyTrader**, atualizados com as deliberações de produto da **W02**. Este documento é puramente conceitual e normativo: **não define nem antecipa implementações de código MQL5 executável**.
 
 ---
 
 ## 1. Princípios Arquiteturais
 
-A arquitetura conceitual do EddyTrader é orientada por três diretrizes:
+A arquitetura conceitual do EddyTrader orienta-se por quatro diretrizes:
 
-1. **Responsabilidade Única e Mínima:** Cada componente conceitual possui uma única atribuição delimitada.
+1. **Responsabilidade Única e Mínima:** Cada módulo conceitual possui uma atribuição estrita e delimitada.
 2. **Determinismo e Isolamento:** Todas as transições operacionais ocorrem através de uma Máquina de Estados Finita (FSM) explícita.
-3. **Nativismo MQL5:** Todos os blocos conceituais operam estritamente sobre as interfaces nativas do runtime do MetaTrader 5.
+3. **Tempo Soberano do Servidor:** Todos os cálculos e janelas temporais operam com base exclusiva no relógio do servidor de negociação da corretora.
+4. **Reconstrução Determinística sobre Persistência:** O sistema prioriza a inferência e reconstrução do estado operacional a partir do histórico nativo da conta, evitando arquivos duplicados e estados inconsistentes.
 
 ---
 
 ## 2. Decomposição Conceitual de Responsabilidades
 
-O sistema decompõe-se funcionalmente em sete módulos conceituais:
+O sistema estrutura-se conceitualmente em sete módulos funcionais:
 
 ```mermaid
 graph TD
-    subgraph "Camada de Percepção"
-        A["Leitor de Estado da Conta (Account State Reader)"]
-        B["Avaliador de Perda Relevante (Risk Evaluator)"]
+    subgraph "Camada de Percepção Temporal e Contábil"
+        A["Leitor de Tempo e Estado da Conta (Server Time & Account State Reader)"]
+        B["Avaliador de Perda Operacional e Janelas (Risk & Window Evaluator)"]
     end
 
     subgraph "Camada de Controle e Decisão"
         C["Máquina de Estados Finita (FSM)"]
-        D["Controlador de Bloqueio (Block Controller)"]
+        D["Controlador de Bloqueio e Janelas (Block & Schedule Controller)"]
     end
 
-    subgraph "Camada de Execução Operacional"
-        E["Motor de Liquidação Compulsória (Liquidation Engine)"]
-        F["Motor de Cancelamento de Ordens (Cancellation Engine)"]
+    subgraph "Camada de Execução Operacional (Escopo Global)"
+        E["Motor de Liquidação Compulsória (Account Liquidation Engine)"]
+        F["Motor de Cancelamento de Ordens (Order Cancellation Engine)"]
     end
 
     subgraph "Camada de Comunicação e Auditoria"
@@ -51,40 +52,36 @@ graph TD
     D --> F
 ```
 
-### 2.1. Leitor de Estado da Conta (*Account State Reader*)
-* **Responsabilidade:** Consultar os dados brutos da conta no terminal MT5: histórico de negociações do período, posições abertas atuais e ordens pendentes.
-* **Escopo:** Leitura pura, sem efeitos colaterais.
+### 2.1. Leitor de Tempo e Estado da Conta (*Server Time & Account Reader*)
+* **Responsabilidade:** Consultar o relógio do servidor de negociação, varrer o histórico diário (`00:00:00` às `23:59:59` do servidor), filtrar negócios de trading (ignorando depósitos/saques) e ler o flutuante líquido atual.
 
-### 2.2. Avaliador de Perda Relevante (*Risk Evaluator*)
-* **Responsabilidade:** Consolidar o resultado realizado e o flutuante conforme a regra de negócio [RN-002](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-002) e calcular a distância até o limite máximo configurado.
-* **Saída:** Indicador booleano de violação de risco (`Limite Excedido: Sim/Não`).
+### 2.2. Avaliador de Perda Operacional e Janelas (*Risk & Window Evaluator*)
+* **Responsabilidade:** Calcular o $\text{RESULTADO\_RELEVANTE}$ somando realizado líquido (com comissões e swaps) e flutuante atual, e medir a distância até o limite considerando a janela operacional ativa (incluindo eventual `baseline_de_reabertura`).
 
 ### 2.3. Máquina de Estados Finita (*FSM - Finite State Machine*)
-* **Responsabilidade:** Orquestrar o estado global da proteção, garantindo que as ações executivas ocorram apenas mediante transições de estado válidas.
-* **Saída:** Estado corrente do sistema e gatilhos de transição.
+* **Responsabilidade:** Controlar o ciclo de vida da proteção, governando as transições entre vigilância, contenção, bloqueio programado e liberação.
 
-### 2.4. Motor de Liquidação Compulsória (*Liquidation Engine*)
-* **Responsabilidade:** Varrer as posições abertas e emitir ordens de fechamento a mercado.
-* **Resiliência:** Em caso de erro em uma posição individual, registra no log e continua o processamento das demais ([RN-009](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-009)).
+### 2.4. Motor de Liquidação Compulsória (*Account Liquidation Engine*)
+* **Responsabilidade:** Emitir ordens de fechamento a mercado para 100% das posições abertas na conta (todos os símbolos e robôs), isolando falhas individuais sem interromper o processamento das demais.
 
-### 2.5. Motor de Cancelamento de Ordens (*Cancellation Engine*)
-* **Responsabilidade:** Varrer as ordens pendentes na conta e emitir solicitações de remoção/cancelamento.
+### 2.5. Motor de Cancelamento de Ordens (*Order Cancellation Engine*)
+* **Responsabilidade:** Emitir requisições de remoção para 100% das ordens pendentes existentes na conta.
 
-### 2.6. Controlador de Bloqueio (*Block Controller*)
-* **Responsabilidade:** Assegurar a manutenção do bloqueio operacional durante o período estipulado e disparar o desbloqueio no horário configurado.
+### 2.6. Controlador de Bloqueio e Janelas (*Block & Schedule Controller*)
+* **Responsabilidade:** Gerenciar a janela temporal de bloqueio de 4 horas a partir do acionamento ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$), retendo o bloqueio após a meia-noite caso a janela atravesse a virada de dia e administrando o gatilho de reabertura de nova janela.
 
 ### 2.7. Apresentador Visual e Logger (*Visual HUD & Journal Logger*)
-* **Responsabilidade:** Renderizar no gráfico as mensagens oficiais de estado e auditoria de cada ação no Diário do MT5.
+* **Responsabilidade:** Exibir no gráfico informações claras de status (relógio do servidor, limite, perdas, instante do bloqueio e previsão de liberação após 4h) e auditar eventos com carimbo de tempo do servidor no Diário do MT5.
 
 ---
 
 ## 3. Máquina de Estados Conceitual
 
-O ciclo de vida operacional é modelado através de quatro estados formais:
+O comportamento operacional do EddyTrader é governado por cinco estados formais:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> MONITORING : Inicialização bem-sucedida (OnInit)
+    [*] --> MONITORING : Inicialização regular (OnInit)
     
     state MONITORING {
         [*] --> VigilanciaAtiva
@@ -92,99 +89,77 @@ stateDiagram-v2
         CalculoRisco --> VigilanciaAtiva : Perda < Limite
     }
 
-    MONITORING --> LIQUIDATING : Perda Acumulada >= Limite Diário
+    MONITORING --> LIQUIDATING : Perda Relevante >= Limite Configurado
     
     state LIQUIDATING {
-        [*] --> FecharPosicoesAbertas
-        FecharPosicoesAbertas --> CancelarOrdensPendentes : Varredura completa
-        CancelarOrdensPendentes --> ConcluirLiquidacao : Ordens processadas
+        [*] --> FecharPosicoes
+        FecharPosicoes --> CancelarOrdens : Varredura completa
+        CancelarOrdens --> AvaliarPendencias
+        AvaliarPendencias --> ConcluidoSucesso : Todas encerradas
+        AvaliarPendencias --> ReterProtecao : Restaram falhas
     }
 
-    LIQUIDATING --> BLOCKED : Liquidação Concluída / Tentada
+    LIQUIDATING --> BLOCKED : Todas encerradas OU proteção retida por falha
     
     state BLOCKED {
-        [*] --> ExibirAvisoBloqueio
-        ExibirAvisoBloqueio --> ImpedirOperacoes : Monitoramento contínuo
-        ImpedirOperacoes --> ExibirAvisoBloqueio : Tick / Timer (Hora Atual < Hora Desbloqueio)
+        [*] --> ExibirStatusBloqueio
+        ExibirStatusBloqueio --> ManterBloqueio : Tick / Timer
+        ManterBloqueio --> ExibirStatusBloqueio : Servidor < t_bloqueio + 4h
+        ManterBloqueio --> PreservarViradaDia : 00:00 alcançado (bloqueio de 4h continua ativo)
+        PreservarViradaDia --> ExibirStatusBloqueio
     }
 
-    BLOCKED --> UNLOCKED : Horário Atual >= Horário de Desbloqueio
+    BLOCKED --> UNBLOCKING : Servidor >= t_bloqueio + 4h
     
-    state UNLOCKED {
+    state UNBLOCKING {
         [*] --> RemoverBloqueio
-        RemoverBloqueio --> ExibirAvisoLiberacao : Restrições removidas
-        ExibirAvisoLiberacao --> [*]
+        RemoverBloqueio --> EstabelecerBaseline : Registrar baseline_de_reabertura
+        EstabelecerBaseline --> ExibirLiberacao : Notificar operador
+        ExibirLiberacao --> [*]
     }
 
-    UNLOCKED --> MONITORING : Transição automática
+    UNBLOCKING --> MONITORING : Iniciar nova janela operacional
 ```
 
-### 3.1. Detalhamento dos Estados
+### 3.1. Transições Críticas Detalhadas
 
-* **`MONITORING` (Monitoramento Nominal):**
-  * O EA avalia periodicamente o resultado financeiro.
-  * O operador pode abrir e gerenciar suas ordens livremente.
-  * O gráfico exibe status de monitoramento ativo.
-* **`LIQUIDATING` (Liquidação Transitória de Emergência):**
-  * Disparado quando a perda atinge ou supera o teto configurado.
-  * O EA emite comandos de fechamento e cancelamento imediatos.
-  * Transita compulsoriamente para `BLOCKED` ao concluir a varredura.
-* **`BLOCKED` (Bloqueio Ativo de Proteção):**
-  * O EA exibe mensagem oficial de bloqueio no gráfico.
-  * Novas ordens são impedidas ou neutralizadas.
-  * Permanece neste estado até a correspondência de horário.
-* **`UNLOCKED` (Desbloqueio e Liberação):**
-  * Estado de transição disparado quando o horário atual iguala ou ultrapassa o horário de desbloqueio.
-  * O bloqueio é desativado, mensagem visual de liberação é apresentada e o sistema reingressa em `MONITORING`.
+1. **`MONITORING` $\to$ `LIQUIDATING`:** Disparada imediatamente quando o resultado financeiro atinge ou supera o limite negativo da janela.
+2. **`LIQUIDATING` $\to$ `BLOCKED`:** Se todas as ordens e posições forem tratadas, entra em bloqueio. Se houver falhas de fechamento em ativos específicos, o sistema **não retorna a monitoramento normal**; transita para bloqueio/contenção retida até que todas as pendências sejam resolvidas.
+3. **`BLOCKED` $\to$ `UNBLOCKING`:** Ocorre estritamente quando o relógio do servidor alcança o término das 4 horas contínuas ($T \ge T_{\text{unlock}}$, onde $T_{\text{unlock}} = T_0 + 4\text{h}$). A passagem pelas `00:00:00` não desarma o bloqueio ativo, mantendo a proteção integral até o término das 4 horas.
+4. **`UNBLOCKING` $\to$ `MONITORING`:** Encerra o evento de bloqueio, calcula a `baseline_de_reabertura` para evitar falso rebloqueio imediato no mesmo tick e reabre o monitoramento para novas perdas na nova janela.
 
 ---
 
-## 4. Questão Arquitetural Crítica: Mecanismo de Bloqueio no MetaTrader 5
+## 4. Reconstrução Determinística vs. Persistência em Disco
 
-O requisito de produto define expressamente:
+A decisão arquitetural de produto para o MVP ([D12](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)) estabelece:
 
-> **"Após atingir o limite, novas operações devem ser bloqueadas."**
-
-Esta seção estabelece formalmente uma **distinção arquitetural essencial** entre duas abordagens técnicas possíveis dentro do ecossistema do MetaTrader 5, sem adotar previamente nenhuma implementação nesta W01.
-
-```mermaid
-flowchart TD
-    subgraph "Abordagem A: Bloqueio Preventivo (Pré-Ordem)"
-        A1["Operador / Outro EA tenta enviar ordem"] --> A2{"É possível interceptar ANTES de chegar ao servidor?"}
-        A2 -- "Apenas se a ordem passar pelo próprio EA" --> A3["Ordem Bloqueada na Origem"]
-        A2 -- "Ordens manuais do terminal ou de outros EAs" --> A4["Limitação MT5: Terminal não intercepta ordens manuais de outros gráficos nativamente sem DLL"]
-    end
-
-    subgraph "Abordagem B: Bloqueio Reativo Imediato (Pós-Ordem)"
-        B1["Ordem chega ao servidor e gera posição/ordem"] --> B2["EddyTrader detecta via OnTrade / OnTradeTransaction / Polling"]
-        B2 --> B3["EA fecha posição / cancela ordem imediatamente a mercado"]
-        B3 --> B4["Conta permanece limpa, neutralizando a tentativa"]
-    end
-```
-
-### 4.1. Abordagem A: Bloqueio Preventivo (*Pre-Trade Interception*)
-* **Conceito:** Impedir que o comando de envio de ordem sequer seja despachado ao servidor da corretora.
-* **Viabilidade Técnica no MT5 Puro (MQL5 sem DLLs):**
-  * Um EA em MQL5 consegue bloquear ordens que *ele próprio* geraria.
-  * **Contudo**, um EA padrão rodando em um gráfico do MT5 **não possui ganchos nativos (*hooks*) no terminal para interceptar o clique manual do operador no botão de negociação a um clique (*One-Click Trading*) ou no diálogo padrão `F9`**, nem para interceptar ordens emitidas por outro EA rodando em outro gráfico antes que cheguem ao servidor, a menos que se utilizem DLLs invasivas (as quais estão formalmente proibidas pelo escopo).
-* **Implicação:** O produto não pode prometer impedir fisicamente o clique do usuário sem uso de tecnologias vetadas.
-
-### 4.2. Abordagem B: Bloqueio Reativo Imediato (*Post-Trade Liquidation / Immediate Kill*)
-* **Conceito:** O EA mantém vigilância ativa por eventos de negociação (`OnTradeTransaction`, `OnTrade`, e polling em `OnTick` / `OnTimer`). No milissegundo em que uma nova ordem pendente ou posição for identificada durante o estado `BLOCKED`, o EA emite imediatamente uma ordem contrária a mercado para encerrar a posição ou cancela a ordem pendente.
-* **Viabilidade Técnica no MT5 Puro:** 100% nativo, seguro, compatível com as regras de MQL5, sem requisição de DLL ou violação de segurança do terminal.
-* **Implicação:** Existe uma fração de segundo (tempo de roundtrip com a corretora) entre a abertura e o fechamento compulsório.
-
-### 4.3. Diretriz Normativa da W01
-* O requisito de produto permanece integralmente preservado.
-* Nenhuma decisão técnica unilateral foi tomada nesta W.
-* A resolução entre a Abordagem A (e suas reais limitações na plataforma), a Abordagem B e eventuais configurações de terminal (como desabilitar *AlgoTrading* programaticamente) foi registrada como **[DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-de-bloqueio-operacional-no-mt5)** para resolução via Spike Técnico formal no roadmap.
+* **Prioridade Absoluta:** O EA deve reconstruir seu estado a partir dos registros contábeis nativos da conta e do histórico do terminal MT5.
+* **Racional (KISS / YAGNI):** Evitar arquivos proprietários duplicados no disco reduz pontos de falha, corrupção de dados e complexidade operacional.
+* **Reserva Técnica:** A W03/W04 delimitará se informações que não possam ser estritamente inferidas do histórico bruto (como a baseline de uma reabertura intradiária recente após restart do terminal) demandarão um registro leve em disco ou se há modelagem algorítmica puramente inferida.
 
 ---
 
-## 5. Rastreabilidade Documental
+## 5. Escopo da Conta e Restrição de Instância Única
+
+* **Escopo Global da Conta (D13):** O EddyTrader não atua isolado no ativo do gráfico; sua governança se estende a todas as posições e ordens da conta de negociação.
+* **Instância Única por Conta (D14):** O sistema opera sob o pressuposto de uma única instância por conta. Mecanismos de detecção ou restrição de instâncias concorrentes serão especificados em W04/W05.
+
+---
+
+## 6. A Questão do Bloqueio no MT5 (Encaminhamento para Spike Técnico)
+
+Conforme mantido no catálogo de questões abertas ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-de-bloqueio-operacional-no-mt5)):
+* O requisito de produto determina que novas operações não permaneçam ativas durante o bloqueio.
+* Em MQL5 nativo puro, ordens manuais disparadas diretamente no terminal são tratadas por **neutralização reativa imediata**.
+* A comprovação da latência, dos eventos de negociação (`OnTradeTransaction`) e do comportamento prático será executada no Spike Técnico laboratorial da **W05**.
+
+---
+
+## 7. Rastreabilidade Documental
 
 * Requisitos Associados: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
-* Casos de Uso Vinculados: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
-* Regras Vinculadas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
-* Questões Abertas e Riscos: [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md)
-* Planejamento de Validação: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)
+* Casos de Uso: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
+* Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+* Planejamento Incremental: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)

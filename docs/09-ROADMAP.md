@@ -8,13 +8,13 @@ Este documento estabelece o planejamento ordenado das etapas de trabalho (*Work 
 
 ```mermaid
 flowchart TD
-    W01["W01: Fundação Documental e Normativa (CONCLUÍDA)"] --> W02["W02: Resolução de Decisões Críticas e GAPs"]
-    W02 --> W03["W03: Spike Técnico das Garantias no MT5"]
-    W03 --> W04["W04: Especificação Técnica do Cálculo e da FSM"]
-    W04 --> W05["W05: Módulo MQL5 de Liquidação e Cancelamento"]
-    W05 --> W06["W06: Motor de Monitoramento e FSM MQL5"]
-    W06 --> W07["W07: Mecanismo de Bloqueio e Desbloqueio"]
-    W07 --> W08["W08: Reconstrução e Persistência de Estado"]
+    W01["W01: Fundação C.H. Documental (CONCLUÍDA)"] --> W02["W02: Resolução de Decisões Críticas e GAPs (CONCLUÍDA)"]
+    W02 --> W03["W03: Especificação Matemática da Perda e Janelas"]
+    W03 --> W04["W04: Especificação Normativa da Máquina de Estados"]
+    W04 --> W05["W05: Spike Técnico MT5/MQL5 (Bloqueio e Garantias)"]
+    W05 --> W06["W06: Primeiro EA Mínimo (Liquidação e Monitoramento)"]
+    W06 --> W07["W07: Módulo de Bloqueio Operacional e Desbloqueio"]
+    W07 --> W08["W08: Reconstrução Determinística e Persistência"]
     W08 --> W09["W09: Testes Integrados e Validação em Conta Demo"]
     W09 --> W10["W10: Endurecimento Operacional e Homologação Conta Real"]
 ```
@@ -29,94 +29,100 @@ flowchart TD
 * **Status:** **CONCLUÍDA**
 * **Objetivo:** Estabelecer a base documental, os limites contratuais, a matriz de requisitos e o mapeamento de riscos a partir dos requisitos aprovados.
 * **Entregáveis:** Documentos `00` a `09` em `docs/`, `README.md` e `AGENTS.md`.
-* **Fora de Escopo:** Qualquer implementação de código MQL5 (`.mq5`, `.mqh`, `.ex5`), protótipos funcionais ou alterações de escopo.
 * **Critério de Conclusão:** Repositório documentado, consistente, rastreável e sem código executável.
 
 ---
 
 ### W02 — Resolução de Decisões Críticas e GAPs
+* **Status:** **CONCLUÍDA**
+* **Objetivo:** Resolver e formalizar contratualmente as decisões de produto e regras temporais e financeiras críticas.
+* **Entregáveis:** 
+  * [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)
+  * [ADR 0002 — Composição da Perda Operacional](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+  * Atualização dos documentos normativos (`03`, `04`, `05`, `06`, `07`, `08`, `09`, `README`).
+* **Critério de Conclusão:** GAPs críticos (GAP-001 a GAP-004) resolvidos, cenários A–F validados documentalmente e zero código executável criado.
+
+---
+
+### W03 — Especificação Matemática da Perda e Janelas de Proteção
 * **Status:** **PRÓXIMA ETAPA RECOMENDADA**
-* **Objetivo:** Submeter ao usuário/proprietário do produto as decisões registradas em [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md) para obter deliberação formal sobre:
-  1. Fuso horário de referência e marco inicial do dia ([GAP-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-001--definicao-do-fuso-horario-e-marco-inicial-do-dia)).
-  2. Tratamento exato de comissões, swaps, depósitos e saques ([GAP-002](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-002--composicao-financeira-do-resultado-relevante)).
-  3. Comportamento temporal do desbloqueio em cruzamento de horários ([GAP-003](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-003--consistencia-temporal-do-horario-de-desbloqueio)).
-  4. Decisão sobre modelo de persistência vs. reconstrução dinâmica ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistencia-e-reconstrucao-de-estado-apos-reinicializacao)).
-* **Entregáveis:** Documento `docs/08-RISCOS-E-QUESTOES-ABERTAS.md` e `docs/05-REGRAS-DE-NEGOCIO.md` atualizados com as respostas e aprovações formais do usuário.
-* **Fora de Escopo:** Codificação de EA ou implementação técnica.
-* **Critério de Conclusão:** Todos os GAPs críticos respondidos formalmente pelo usuário.
+* **Objetivo:** Formalizar a especificação matemática rigorosa, equações algébricas e invariantes numéricos de:
+  1. Resultado realizado do dia e cálculo líquido de comissões e swaps;
+  2. Resultado flutuante atual e posições herdadas da virada do dia;
+  3. Formulação matemática exata da `baseline_de_reabertura` para novas janelas operacionais intradiárias;
+  4. Condição exata de acionamento do gatilho de proteção;
+  5. Invariantes financeiros de exclusão de transferências de capital (depósitos/saques).
+* **Entregáveis:** Documento normativo de Especificação Matemática e Invariantes Contábeis do EddyTrader.
+* **Fora de Escopo:** Implementação de código MQL5 executável ou compilação.
+* **Critério de Conclusão:** Todas as fórmulas e comportamentos numéricos especificados matematicamente e prontos para codificação.
 
 ---
 
-### W03 — Spike Técnico das Garantias no MT5
-* **Objetivo:** Conduzir teste laboratorial isolado em ambiente MT5 para comprovar as capacidades e limitações reais da plataforma para:
-  1. Eficácia e tempo de resposta do bloqueio reativo imediato via `OnTradeTransaction()` vs. ordens manuais ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-de-bloqueio-operacional-no-mt5)).
-  2. Comportamento de liquidação a mercado sob Hedging e Netting ([DQ-002](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-002--tratamento-de-contas-netting-vs-hedging)).
-  3. Avaliação de retcodes com mercado fechado ([DQ-004](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-004--tratamento-de-mercado-fechado--ativos-iiquidos)).
-* **Entregáveis:** Relatório técnico do Spike documentando evidências reais colhidas no MT5.
-* **Fora de Escopo:** Construção do produto final ou EA definitivo.
-* **Critério de Conclusão:** Viabilidade técnica comprovada com dados reais de comportamento do terminal.
+### W04 — Especificação Normativa da Máquina de Estados
+* **Status:** Planejada
+* **Objetivo:** Desenhar o modelo formal determinístico da FSM (estados, eventos, transições, estruturas de dados MQL5 e política de reconstrução determinística de estado após restart do terminal).
+* **Entregáveis:** Documento de Especificação Técnica da Máquina de Estados e Estrutura de Módulos MQL5.
+* **Fora de Escopo:** Implementação de código MQL5 executável.
+* **Critério de Conclusão:** FSM formalmente especificada com todas as transições mapeadas.
 
 ---
 
-### W04 — Especificação Técnica do Cálculo e da FSM
-* **Objetivo:** Elaborar o desenho técnico detalhado com as fórmulas matemáticas homologadas em W02 e a especificação das assinaturas de funções e estruturas de dados em MQL5.
-* **Entregáveis:** Documento de Especificação Técnica de Implementação (arquitetura física dos módulos MQL5).
-* **Fora de Escopo:** Escrita de código executável final.
-* **Critério de Conclusão:** Especificação validada e alinhada com as decisões de W02 e evidências de W03.
+### W05 — Spike Técnico MT5/MQL5 (Garantias e Bloqueio)
+* **Status:** Planejada
+* **Objetivo:** Conduzir testes laboratoriais em ambiente MetaTrader 5 para validar na prática:
+  1. Eficácia e latência da neutralização reativa imediata via `OnTradeTransaction()` vs. ordens manuais do terminal ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-tecnico-de-bloqueio-operacional-no-mt5));
+  2. Comportamento de liquidação a mercado sob Hedging e Netting ([DQ-002](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-002--tratamento-de-contas-netting-vs-hedging));
+  3. Tolerância a slippage e deviation ([DQ-003](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-003--politica-de-slippage-e-deviation-em-fechamento-de-emergencia));
+  4. Resposta a ativos com pregão fechado ([DQ-004](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-004--tratamento-de-ativos-com-mercado-fechado)).
+* **Entregáveis:** Relatório técnico de evidências empíricas no MT5.
+* **Critério de Conclusão:** Comprovação das garantias técnicas que o MQL5 nativo oferece para o bloqueio e liquidação.
 
 ---
 
-### W05 — Módulo MQL5 de Liquidação e Cancelamento
-* **Objetivo:** Implementar em MQL5 a biblioteca/módulo responsável exclusivamente por iterar posições e ordens pendentes e emitir comandos de fechamento e cancelamento com isolamento de falhas.
-* **Entregáveis:** Módulo MQL5 isolado (`LiquidationEngine.mqh`) com tratamento de retcodes e logging.
-* **Fora de Escopo:** Interface gráfica, cálculos de dia ou lógica de bloqueio temporal.
-* **Critério de Conclusão:** Módulo compila sem warnings no MetaEditor e fecha posições de teste em conta Demo.
+### W06 — Primeiro EA Mínimo (Liquidação e Monitoramento)
+* **Status:** Planejada
+* **Objetivo:** Implementar o núcleo do primeiro EA MQL5 contendo os módulos de cálculo de perda e liquidação/cancelamento de emergência com isolamento de falhas.
+* **Entregáveis:** Código-fonte MQL5 compilável sem erros no MetaEditor.
+* **Critério de Conclusão:** EA calcula a perda real e executa fechamento de posições de teste em Conta Demo.
 
 ---
 
-### W06 — Motor de Monitoramento e FSM MQL5
-* **Objetivo:** Implementar as rotinas de leitura de histórico, cálculo contínuo de perda diária e a máquina de estados nominal (`MONITORING` -> `LIQUIDATING`).
-* **Entregáveis:** EA mínimo capaz de calcular a perda e disparar o módulo de liquidação ao atingir o limite.
-* **Fora de Escopo:** Rotinas complexas de bloqueio de ordens manuais e interface gráfica rica.
-* **Critério de Conclusão:** EA identifica violação de saldo/flutuante em conta Demo e executa o disparo da liquidação com sucesso.
+### W07 — Módulo de Bloqueio Operacional e Desbloqueio
+* **Status:** Planejada
+* **Objetivo:** Integrar as regras de bloqueio temporal sob o relógio do servidor, manutenção de bloqueio na virada de dia e abertura de nova janela com baseline.
+* **Entregáveis:** EA integrado com FSM completa e comentários visuais no gráfico.
+* **Critério de Conclusão:** Ciclo de bloqueio e reabertura temporal validado em Conta Demo.
 
 ---
 
-### W07 — Mecanismo de Bloqueio e Desbloqueio
-* **Objetivo:** Implementar a lógica de manutenção do estado `BLOCKED` (neutralização de novas operações) e o desarme da proteção no horário configurado (`UNLOCKED` -> `MONITORING`).
-* **Entregáveis:** EA integrado com ciclo completo de bloqueio, liberação horária e comentários visuais no gráfico.
-* **Fora de Escopo:** Persistência em disco complexa ou dashboards visuais avançados.
-* **Critério de Conclusão:** Ciclo completo de bloqueio e desbloqueio temporal validado em conta Demo.
-
----
-
-### W08 — Reconstrução e Persistência de Estado
-* **Objetivo:** Implementar o modelo de resiliência a reinicializações acordado em W02 (reconstrução contábil dinâmica ou persistência local em `MQL5/Files`).
-* **Entregáveis:** Módulo de persistência/reconstrução integrado ao `OnInit()`.
-* **Fora de Escopo:** Bancos de dados externos ou sincronização na nuvem.
-* **Critério de Conclusão:** EA reiniciado no meio de um período de bloqueio reconhece o estado anterior e permanece bloqueado até o horário devido.
+### W08 — Reconstrução Determinística e Persistência
+* **Status:** Planejada
+* **Objetivo:** Implementar a restauração segura de estado no `OnInit()` a partir do histórico nativo de transações e posições da conta.
+* **Entregáveis:** Módulo de recuperação pós-restart validado.
+* **Critério de Conclusão:** Reinício intradiário do MT5 preserva estado bloqueado até o horário agendado.
 
 ---
 
 ### W09 — Testes Integrados e Validação em Conta Demo
-* **Objetivo:** Executar a suíte completa de casos de teste do MVP ([TC-MVP-01 a TC-MVP-06](file:///C:/Projetos/eddytrader/docs/07-MVP.md#5-criterios-objetivos-de-aceite-do-mvp)) em ambiente real de simulação.
-* **Entregáveis:** Relatório de evidências de homologação em Conta Demo com prints e logs de execução.
-* **Fora de Escopo:** Operação com dinheiro real em Conta Real.
-* **Critério de Conclusão:** 100% dos critérios de aceite do MVP atendidos com evidências comprovadas.
+* **Status:** Planejada
+* **Objetivo:** Executar a suíte de testes do MVP ([TC-MVP-01 a TC-MVP-08](file:///C:/Projetos/eddytrader/docs/07-MVP.md#5-criterios-objetivos-de-aceite-do-mvp)) em ambiente real de simulação.
+* **Entregáveis:** Relatório de evidências de homologação em Conta Demo com prints e logs.
+* **Critério de Conclusão:** 100% dos testes aprovados em Conta Demo.
 
 ---
 
 ### W10 — Endurecimento Operacional e Homologação Conta Real
-* **Objetivo:** Refinar parâmetros de desvio (*deviation*), validações de integridade, logs de auditoria e proteções contra desconexão de rede para disponibilização para Conta Real.
-* **Entregáveis:** Versão final compilada do EA EddyTrader pronta para uso pelo operador em Conta Real.
-* **Fora de Escopo:** Novas funcionalidades não aprovadas.
-* **Critério de Conclusão:** Aprovação formal do usuário final para operação assistida em Conta Real.
+* **Status:** Planejada
+* **Objetivo:** Refinamentos finais de resiliência, latência, reconexão de rede e autorização assistida para Conta Real.
+* **Entregáveis:** Versão homologada do EddyTrader para produção.
+* **Critério de Conclusão:** Aprovação formal do operador para uso assistido em Conta Real.
 
 ---
 
 ## 3. Rastreabilidade Documental
 
-* Manifesto Fundacional: [00 — Manifesto](file:///C:/Projetos/eddytrader/docs/00-MANIFESTO.md)
+* Manifesto: [00 — Manifesto](file:///C:/Projetos/eddytrader/docs/00-MANIFESTO.md)
 * Escopo e Proibições: [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md)
-* Critérios de Aceite do MVP: [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md)
-* Incertezas a Resolver na W02: [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md)
+* Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
+* Critérios do MVP: [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)

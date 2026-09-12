@@ -1,114 +1,90 @@
 # 08 — Riscos Técnicos, Lacunas e Questões Abertas
 
-Este documento cataloga de forma explícita e rastreável todas as ambiguidades conceituais, riscos técnicos e decisões de projeto pendentes do **EddyTrader**.
+Este documento cataloga de forma explícita e rastreável todas as ambiguidades conceituais, riscos técnicos e decisões de projeto do **EddyTrader**.
 
-> **Diretriz C.H.:** Nenhuma ambiguidade ou detalhe técnico omisso na especificação original foi inventado ou assumido tacitamente. As questões estão registradas como pendentes até sua deliberação ou validação via Spike Técnico.
-
----
-
-## 1. Lacunas de Especificação (GAPs)
-
-### GAP-001 — Definição do Fuso Horário e Marco Inicial do "Dia"
-* **Descrição:** A especificação determina o monitoramento da "perda diária", mas não define qual relógio rege o início e término do dia.
-* **Por que importa:** Se o dia for considerado pelo fuso horário do servidor da corretora (comum no Forex/CFDs, ex: GMT+2/GMT+3), o reset ocorre em horário diferente do horário civil local do operador (ex: GMT-3 no Brasil). Uma perda corrida às 19h locais pode cair no "dia seguinte" da corretora.
-* **Opções Possíveis:**
-  1. *Opção A:* Utilizar estritamente o horário do servidor da corretora (`TimeCurrent()`).
-  2. *Opção B:* Utilizar o horário local da máquina do usuário (`TimeLocal()`).
-  3. *Opção C:* Tornar o fuso horário ou o horário de início do dia configurável pelo operador.
-* **Status:** **PENDENTE DE VALIDAÇÃO (Prioridade: Alta)**.
+> **Diretriz C.H.:** As decisões de produto formalizadas na W02 estão registradas com status `RESOLVIDA` e referenciam seus respectivos ADRs. Questões técnicas que dependem de evidência prática na plataforma MT5 ou especificação detalhada permanecem explicitamente marcadas com o estágio correspondente.
 
 ---
 
-### GAP-002 — Composição Financeira do Resultado Relevante
-* **Descrição:** O requisito aprovado estabelece: *"resultado financeiro realizado durante o período considerado somado ao resultado financeiro das posições ainda abertas"*. Não foi formalizado como tratar depósitos, saques, comissões de corretagem e custos de rolagem (*swap*).
-* **Por que importa:** Se o operador depositar ou retirar recursos durante o pregão, uma apuração baseada puramente na variação de Saldo (*Balance*) ou Patrimônio (*Equity*) distorcerá a métrica de perda operacional. Além disso, se comissões e swaps não forem somados ao lucro bruto das posições, a perda real da conta será subestimada.
-* **Opções Possíveis:**
-  1. *Opção A:* Soma do lucro líquido dos negócios fechados no dia (`Deal Profit + Deal Commission + Deal Swap`) + lucro flutuante líquido das posições abertas (`Position Profit + Position Swap`). Ignora movimentações de depósito/saque.
-  2. *Opção B:* Variação líquida do patrimônio líquido (*Equity Delta*) descontando transferências de capital identificadas.
-* **Status:** **PENDENTE DE VALIDAÇÃO (Prioridade: Alta)**.
+## 1. Matriz de Lacunas de Especificação (GAPs)
+
+| ID | Título | Status | Decisão / Encaminhamento | Referência |
+| :--- | :--- | :--- | :--- | :--- |
+| **GAP-001** | Fuso Horário e Marco Inicial do "Dia" | **RESOLVIDA** | Referência temporal oficial é exclusivamente o **horário do servidor de negociação da conta**. O dia operacional inicia às `00:00:00` e encerra às `23:59:59` do servidor. | [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) / Decisão D01 e D02 |
+| **GAP-002** | Composição Contábil do Resultado Relevante | **RESOLVIDA** | Resultado = Realizado do Dia + Flutuante Atual. Custos de trading (comissões e swaps) são obrigatoriamente incluídos. Movimentações de capital (depósitos, saques e créditos) são estritamente excluídas. | [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) / Decisão D03, D04 e D05 |
+| **GAP-003** | Consistência Temporal do Bloqueio e Virada de Dia | **RESOLVIDA (ATUALIZADA)** | Duração relativa contínua de **4 horas** a partir do disparo ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$). A virada de `00:00:00` não encerra nem afeta a duração. Bloqueio ativo prevalece até completar 4 horas mesmo com início de novo dia. Desbloqueio encerra evento e inicia nova janela operacional via baseline. *(Interpretação anterior de horário absoluto substituída por esclarecimento do PO)*. | [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) / Decisões D07, D08, D09, D10 e D11 |
+| **GAP-004** | Escopo de Atuação na Conta (Símbolos e Magics) | **RESOLVIDA** | Escopo global da conta: todas as posições, todas as ordens pendentes, todos os símbolos, manuais ou de outros robôs. Sem filtros para o MVP. | Decisão D13 / [RN-004](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-004) / [RN-005](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-005) |
+| **GAP-005** | Persistência vs. Reconstrução de Estado após Restart | **RESOLVIDA PARCIALMENTE / ADIADA PARA W03/W04** | Princípio de produto para MVP: priorizar reconstrução determinística baseada no histórico nativo do MT5 sobre persistência em arquivos (YAGNI). Avaliar em W03/W04 se baseline intradiária requer arquivo local mínimo. | Decisão D12 |
+| **GAP-006** | Especificação Matemática da Baseline de Reabertura | **ADIADA PARA W03** | Conceito de nova janela aprovado na W02. A formulação matemática exata, equações de referência e invariantes numéricos serão especificados na W03. | [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) / W03 Roadmap |
 
 ---
 
-### GAP-003 — Consistência Temporal do Horário de Desbloqueio
-* **Descrição:** O operador configura o horário de desbloqueio como string/hora (ex: `16:00`). O que deve acontecer se o bloqueio for disparado às `16:30` (horário posterior ao desbloqueio) ou se o bloqueio for acionado às `23:00` com liberação prevista para as `09:00` do dia seguinte?
-* **Por que importa:** Sem regra clara de comparação temporal, uma checagem ingênua do tipo `HoraAtual >= HoraDesbloqueio` faria com que uma conta bloqueada às 16:30 fosse desbloqueada no milissegundo seguinte caso a hora de desbloqueio fosse 16:00.
-* **Opções Possíveis:**
-  1. *Opção A:* Se `Horário de Bloqueio >= Horário de Desbloqueio`, a liberação só ocorre no dia civil seguinte ao atingir o horário.
-  2. *Opção B:* Exigir que o horário de desbloqueio seja sempre estritamente no mesmo dia operacional, desarmando o bloqueio somente às 00:00 se a hora configurada já tiver passado.
-  3. *Opção C:* Adicionar parâmetro de "duração do bloqueio em minutos" além do horário fixo.
-* **Status:** **PENDENTE DE VALIDAÇÃO (Prioridade: Alta)**.
+## 2. Detalhamento dos GAPs
 
----
+### GAP-001 — Fuso Horário e Marco Inicial do "Dia"
+* **Status:** **RESOLVIDA (W02)**
+* **Decisão:** O EddyTrader utiliza o horário do servidor de negociação (`00:00:00` às `23:59:59`).
+* **Racional:** Independência do relógio local do usuário e alinhamento com os registros contábeis da corretora.
+* **Documento Vinculado:** [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+
+### GAP-002 — Composição Contábil do Resultado Relevante
+* **Status:** **RESOLVIDA (W02)**
+* **Decisão:** $\text{Resultado Relevante} = \text{Realizado do Dia} + \text{Flutuante Atual}$. Custos de comissão e swap são incluídos. Saques e depósitos são desconsiderados. Posições antigas mantidas abertas contribuem com seu flutuante no novo dia.
+* **Racional:** Refletir a variação econômica real líquida exclusiva das operações de trading.
+* **Documento Vinculado:** [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md).
+
+### GAP-003 — Consistência Temporal da Duração do Bloqueio e Virada de Dia
+* **Status:** **RESOLVIDA (W02 — Atualizada por esclarecimento do PO)**
+* **Histórico e Rastreabilidade:** A especificação preliminar continha o exemplo `16:00`, que fora interpretado como um horário fixo diário de liberação. O Product Owner formalizou que a intenção real de produto é um **bloqueio contínuo de 4 horas a contar do momento em que a perda atinge o limite**. A interpretação anterior de horário absoluto diário (D07 anterior, D08/D10 anteriores) foi formalmente revogada e substituída (*superseded*).
+* **Decisão Vigente:**
+  1. **Duração Relativa:** O bloqueio dura exatamente 4 horas contadas a partir do instante do disparo no horário do servidor ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$).
+  2. **Virada de Dia:** A virada de `00:00:00` não interfere na duração. Se o bloqueio for acionado às 23:30, a liberação ocorre às 03:30 do dia seguinte.
+  3. **Novo Dia Durante Bloqueio:** O início do novo dia operacional não desativa o bloqueio ativo; ele permanece ativo até completar as 4 horas.
+  4. **Liberação:** Ao completar a janela de 4 horas ($t \ge t_{\text{bloqueio}} + 4\text{h}$), o bloqueio é finalizado e o sistema torna-se elegível à liberação.
+  5. **Baseline Pós-Liberação:** O desbloqueio encerra o evento e inicia uma nova janela operacional via `baseline_de_reabertura` (D09 preservada), prevenindo rebloqueio imediato por perdas históricas do dia.
+* **Racional:** Garantir proteção uniforme e determinística de 4 horas para qualquer instante de violação, preservando a coerência mesmo na transição de dias.
+* **Documento Vinculado:** [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ### GAP-004 — Escopo de Atuação na Conta (Símbolos e Magic Numbers)
-* **Descrição:** O requisito estabelece fechar todas as posições da conta. Caso o operador execute outros robôs com Magic Numbers específicos ou opere múltiplos ativos simultaneamente, o EddyTrader deve atuar sobre a conta inteira ou admitir filtros?
-* **Por que importa:** Em contas compartilhadas com múltiplos robôs, liquidar a conta inteira interrompe estratégias alheias. Para gestão de risco global, no entanto, a conta inteira é a abordagem mais segura.
-* **Opções Possíveis:**
-  1. *Opção A:* Escopo global de conta (fecha absolutamente tudo na conta, sem filtro de símbolo ou Magic Number — alinhado à especificação original).
-  2. *Opção B:* Suporte futuro a filtro opcional por Magic Number ou símbolo atual.
-* **Status:** **PRESERVADO ESCOPO GLOBAL DA CONTA (Evolução opcional catalogada para Pós-MVP)**.
-
----
+* **Status:** **RESOLVIDA (W02)**
+* **Decisão:** Atuação irrestrita sobre a conta inteira. Não há filtros por símbolo, Magic Number ou autor da ordem.
+* **Racional:** A salvaguarda de perda diária visa à sobrevivência da conta como um todo.
 
 ### GAP-005 — Persistência e Reconstrução de Estado após Reinicialização
-* **Descrição:** O que acontece se o terminal MT5 for reiniciado, a máquina sofrer queda de energia ou o operador remover e reinserir o EA durante o estado `BLOCKED`?
-* **Por que importa:** Se o estado do EA residir puramente na memória volátil RAM, ao reiniciar o terminal o EA iniciará em `MONITORING`. Se o cálculo de perda do dia ainda apontar perda >= limite, ele reentraria em bloqueio imediatamente, mas se o resultado tiver sido zerado pelo fechamento das posições ou pela interpretação do dia, o bloqueio pode ser perdido prematuramente.
-* **Opções Possíveis:**
-  1. *Opção A (Reconstrução Dinâmica Pura):* O EA não salva arquivos em disco. Na inicialização (`OnInit`), ele recalcula o histórico do dia; se a perda realizada já excedeu o limite e o horário atual for anterior ao horário de desbloqueio, entra automaticamente em `BLOCKED`.
-  2. *Opção B (Persistência em Disco Local):* O EA grava um arquivo texto/binário na pasta `MQL5/Files` registrando o timestamp do bloqueio e só o remove na liberação.
-* **Status:** **PENDENTE DE DECISÃO TÉCNICA (Prioridade: Média)**.
+* **Status:** **RESOLVIDA PARCIALMENTE / ADIADA PARA W03/W04**
+* **Decisão:** Para o MVP, adotar a reconstrução determinística a partir do histórico nativo como primeira escolha técnica, reduzindo arquivos e complexidade. A necessidade de arquivo auxiliar mínimo para a baseline intradiária e tempo de bloqueio será delimitada na W03/W04.
 
 ---
 
-## 2. Decisões de Projeto e Plataforma (DQs)
+## 3. Decisões de Projeto e Plataforma (DQs)
 
-### DQ-001 — Mecanismo de Bloqueio Operacional no MT5
-* **Descrição:** Qual é a garantia técnica real que o MetaTrader 5 em MQL5 puro permite oferecer para cumprir o requisito de "bloquear novas operações"?
-* **Análise Técnica:**
-  * **Abordagem Preventiva (Pré-Ordem):** Um EA comum em MQL5 não pode interceptar a interface gráfica do usuário para desativar o botão de negociação manual do MT5 ou interceptar ordens emitidas diretamente pelo diálogo `F9` sem injeção de DLL (proibida).
-  * **Abordagem Reativa Imediata (Pós-Ordem):** O EA monitora o evento `OnTradeTransaction()`. No milissegundo em que uma ordem for convertida em posição ou ordem pendente durante o estado `BLOCKED`, o EA emite uma ordem a mercado imediata de fechamento/cancelamento.
-  * **Abordagem de Terminal (`TerminalInfoSetInteger`):** Investigar se a plataforma permite desabilitar o *AlgoTrading* do terminal programaticamente para impedir outros robôs.
-* **Ação Necessária:** Realizar um Spike Técnico prático no MT5 antes de iniciar a codificação do EA (ver [W03 no Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md#w03--spike-tecnico-das-capacidades-do-mt5mql5)).
-* **Status:** **PENDENTE DE SPIKE TÉCNICO (Prioridade: Crítica)**.
-
----
-
-### DQ-002 — Tratamento de Contas Netting vs. Hedging
-* **Descrição:** Contas Netting (comuns em bolsas de valores como B3) mantêm apenas uma posição consolidada por ativo. Contas Hedging (comuns no mercado Forex internacional) permitem posições simultâneas de compra e venda no mesmo ativo.
-* **Por que importa:** A rotina de fechamento de ordens difere no tratamento de posições parciais ou fechamento por ordem oposta (*CloseBy*).
-* **Diretriz:** A rotina de liquidação deve ser escrita utilizando a classe padrão de negociação `CTrade` ou rotinas nativas de envio de ordens que identifiquem dinamicamente o modo de conta (`ACCOUNT_MARGIN_MODE`).
-* **Status:** **PLANEJADO PARA ESPECIFICAÇÃO TÉCNICA (Prioridade: Alta)**.
+| ID | Título | Status | Escopo / Encaminhamento |
+| :--- | :--- | :--- | :--- |
+| **DQ-001** | Mecanismo Técnico de Bloqueio Operacional no MT5 | **ADIADA PARA W05** | Spike técnico prático para comprovar a viabilidade e latência da neutralização reativa via eventos de negociação (`OnTradeTransaction`) e polling vs. ordens manuais. |
+| **DQ-002** | Tratamento de Contas Netting vs. Hedging | **ADIADA PARA W05** | Requisito de produto estabelece suporte a ambas as modalidades. A mecânica específica de fechamento e cancelamento será validada em laboratório no MT5. |
+| **DQ-003** | Política de Slippage e Deviation em Fechamento de Emergência | **ADIADA PARA W05** | Definição da tolerância de desvio em pontos (`deviation`) para garantir execução sem requote durante alta volatilidade. |
+| **DQ-004** | Tratamento de Ativos com Mercado Fechado | **ADIADA PARA W05** | Validação laboratorial de códigos de retorno (`TRADE_RETCODE_MARKET_CLOSED`) para assegurar não travamento e continuidade de processamento. |
+| **DQ-005** | Detecção e Prevenção de Múltiplas Instâncias do EA | **ADIADA PARA W04** | Definição da regra para impedir que mais de uma instância do EddyTrader opere concorrentemente na mesma conta. |
 
 ---
 
-### DQ-003 — Tolerância a Slippage / Desvio na Execução de Emergência
-* **Descrição:** Em momentos de alta volatilidade, o envio de ordens de fechamento a mercado sem desvio máximo configurado (`deviation`) pode gerar rejeição por preço fora de mercado (*requote*). Se configurado com desvio infinito, pode sofrer forte slippage.
-* **Decisão Necessária:** Definir a política de desvio aceitável para o fechamento compulsório de emergência. A prioridade de encerramento em emergência costuma exigir execução garantida a qualquer preço de mercado.
-* **Status:** **PENDENTE DE VALIDAÇÃO (Prioridade: Média)**.
-
----
-
-### DQ-004 — Tratamento de Mercado Fechado / Ativos Iíquidos
-* **Descrição:** Se uma posição estiver aberta em um símbolo cujo pregão já encerrou (ex: ações no fechamento do dia) e o limite for atingido por perdas em outro ativo ativo (ex: mini-índice), o envio de ordem de fechamento para o ativo fechado retornará erro (`TRADE_RETCODE_MARKET_CLOSED`).
-* **Diretriz Prevista:** O tratamento aprovado em [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013) determina que a falha deve ser registrada em log e as demais posições devem continuar sendo processadas. O sistema não deve travar em loop infinito tentando fechar um mercado indisponível.
-* **Status:** **REQUISITO FORMALIZADO, PENDENTE DE VERIFICAÇÃO EM TESTE (Prioridade: Média)**.
-
----
-
-## 3. Riscos Técnicos e Operacionais (RISKs)
+## 4. Riscos Técnicos e Operacionais (RISKs)
 
 | ID | Risco Identificado | Severidade | Probabilidade | Mitigação Proposta |
 | :--- | :--- | :--- | :--- | :--- |
-| **RISK-001** | **Derrapagem de Execução (Slippage):** A perda final consolidada ultrapassar o limite configurado (ex: limite 500, perda real 540) devido à latência da corretora e slippage em ordens a mercado. | Alta | Alta | Deixar claro na documentação que o limite atua como gatilho de disparo de encerramento, e que a execução final está sujeita aos preços reais fornecidos pela contraparte da corretora. |
-| **RISK-002** | **Falsa Sensação de Segurança quanto a Ordens Manuais:** O operador acreditar que o EA desabilitará fisicamente os botões da interface do MetaTrader 5 sem DLLs. | Alta | Média | Formalizar explicitamente que no MT5 puro o bloqueio atua por liquidação e cancelamento reativo imediato de quaisquer operações detectadas na conta durante o período de bloqueio. |
-| **RISK-003** | **Divergência de Fusos Horários:** Conflito entre a hora do servidor da corretora e a hora local do computador resultar em desbloqueio em horário indesejado. | Média | Média | Definir de forma inequívoca o relógio de referência utilizado na configuração do horário de liberação. |
-| **RISK-004** | **Degradação de Performance por Polling Excessivo:** Loop de monitoramento mal dimensionado consumir 100% da CPU do terminal. | Média | Baixa | Utilizar eventos orientados a tick (`OnTick`) e temporizador controlado (`OnTimer` de no mínimo 500ms a 1s), evitando laços vazios de espera. |
-| **RISK-005** | **Perda do Estado de Bloqueio por Reinicialização do Terminal:** Queda de energia ou fechamento do MT5 fazer o EA esquecer que estava bloqueado. | Média | Média | Implementar reconstrução dinâmica com base no histórico contábil do dia ou persistência em arquivo de configuração local. |
+| **RISK-001** | **Derrapagem de Execução (Slippage):** A perda final consolidada ultrapassar o limite configurado devido à latência da corretora e slippage em ordens a mercado em momento de alta volatilidade. | Alta | Alta | Deixar formalizado que o limite é um gatilho de disparo de emergência, sujeito à liquidez e preços reais da contraparte da corretora. |
+| **RISK-002** | **Falsa Sensação de Bloqueio Preventivo Físico:** O operador assumir que o EA desabilita o clique manual do MT5 antes do envio (impossível sem DLL). | Alta | Média | Esclarecer na documentação normativa que o bloqueio nativo atua por neutralização/liquidação reativa imediata no milissegundo em que a ordem for gerada. |
+| **RISK-003** | **Divergência de Fuso Horário:** Operador interpretar o horário previsto de desbloqueio como horário local em vez do horário do servidor. | Média | Média | Mitigado pela formalização em D01/ADR 0001 (referência oficial é o horário do servidor). O EA deve exibir visualmente o horário atual do servidor e o instante exato de liberação no relógio do servidor ($t_{\text{bloqueio}} + 4\text{h}$). |
+| **RISK-004** | **Degradação de Performance do MT5:** Loop de monitoramento excessivamente agressivo consumir alta CPU. | Média | Baixa | Utilizar arquitetura dirigida por eventos (`OnTick` e timer controlado de 500ms a 1s), evitando laços de espera ocupada. |
+| **RISK-005** | **Perda de Estado em Falha Elétrica / Reinicialização:** Terminal reiniciado durante o período de 4 horas esquecer restrições se não reconstruir estado. | Média | Média | Mitigado pela diretriz de reconstrução determinística a partir do histórico diário de negócios e posições da conta. |
+| **RISK-006** | **Múltiplas Instâncias Concorrentes:** Operador anexar o EddyTrader a mais de um gráfico da mesma conta, gerando concorrência e ordens duplicadas de fechamento. | Alta | Média | Requisito formal de instância única por conta (D14); especificar mecanismo de detecção/guarda em W04. |
+| **RISK-007** | **Desconexão do Terminal / Falha de Rede com o Servidor:** Terminal perder conexão durante processo de fechamento de emergência. | Alta | Baixa | Registrar status de tentativa pendente e reexecutar a liquidação no primeiro instante de reconexão detectado. |
 
 ---
 
-## 4. Rastreabilidade Documental
+## 5. Rastreabilidade Documental
 
-* Origem dos Requisitos Afetados: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
-* Regras Impactadas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
+* Origem dos Requisitos: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
+* Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
 * Alinhamento no Cronograma: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)

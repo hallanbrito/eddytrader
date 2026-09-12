@@ -2,7 +2,7 @@
 
 O **EddyTrader** é uma ferramenta de controle de risco operacional projetada exclusivamente para a plataforma **MetaTrader 5 (MT5)**, desenvolvida nativamente em **MQL5**.
 
-Sua única responsabilidade é monitorar continuamente o resultado da conta do operador, fechar todas as posições abertas e cancelar ordens pendentes quando um limite monetário diário de perda for atingido, bloqueando novas operações até um horário pré-configurado.
+Sua única responsabilidade é monitorar continuamente o resultado da conta do operador, fechar todas as posições abertas e cancelar ordens pendentes quando um limite monetário diário de perda for atingido, bloqueando novas operações por um período de 4 horas a partir do acionamento no horário oficial do servidor de negociação.
 
 O EddyTrader **não é** uma estratégia de trading: não abre operações, não gera sinais, não define stops individuais e não busca gerenciar metas de lucro.
 
@@ -10,8 +10,9 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W01 — Fundação Documental e Normativa`
-* **Status:** Documentação inicial e normativa concluída segundo o **Método C.H.**
+* **Fase:** `W02 — Resolução de Decisões Críticas e GAPs`
+* **Status:** Concluída. Decisões temporais, contábeis e operacionais formalizadas via ADRs normativos segundo o **Método C.H.**
+* **Próxima Fase:** `W03 — Especificação Matemática da Perda e Janelas de Proteção`.
 * **Aviso Importante:** **Nesta fase não há código executável (`.mq5`, `.mqh`, `.ex5`), protótipos funcionais ou robôs operacionais neste repositório.** O desenvolvimento de código será realizado estritamente nas etapas futuras aprovadas.
 
 ---
@@ -37,8 +38,12 @@ Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/
 6. [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md): Regras de cálculo, disparo, liquidação e bloqueio.
 7. [06 — Arquitetura Conceitual](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md): Módulos conceituais, máquina de estados e questão do bloqueio no MT5.
 8. [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md): Menor produto viável e critérios objetivos de teste e aceite.
-9. [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo formal de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
-10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos próximos Work Packages (W).
+9. [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
+10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos Work Packages (W).
+
+### Registros de Decisões Arquiteturais (ADRs)
+* [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)
+* [ADR 0002 — Composição da Perda Operacional](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
 
 ---
 
