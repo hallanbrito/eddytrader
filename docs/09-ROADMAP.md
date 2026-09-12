@@ -9,7 +9,7 @@ Este documento estabelece o planejamento ordenado das etapas de trabalho (*Work 
 ```mermaid
 flowchart TD
     W01["W01: Fundação C.H. Documental (CONCLUÍDA)"] --> W02["W02: Resolução de Decisões Críticas e GAPs (CONCLUÍDA)"]
-    W02 --> W03["W03: Especificação Matemática da Perda e Janelas"]
+    W02 --> W03["W03: Especificação Matemática da Perda e Janelas (CONCLUÍDA)"]
     W03 --> W04["W04: Especificação Normativa da Máquina de Estados"]
     W04 --> W05["W05: Spike Técnico MT5/MQL5 (Bloqueio e Garantias)"]
     W05 --> W06["W06: Primeiro EA Mínimo (Liquidação e Monitoramento)"]
@@ -45,21 +45,22 @@ flowchart TD
 ---
 
 ### W03 — Especificação Matemática da Perda e Janelas de Proteção
-* **Status:** **PRÓXIMA ETAPA RECOMENDADA**
+* **Status:** **CONCLUÍDA**
 * **Objetivo:** Formalizar a especificação matemática rigorosa, equações algébricas e invariantes numéricos de:
   1. Resultado realizado do dia e cálculo líquido de comissões e swaps;
   2. Resultado flutuante atual e posições herdadas da virada do dia;
   3. Formulação matemática exata da `baseline_de_reabertura` para novas janelas operacionais intradiárias;
   4. Condição exata de acionamento do gatilho de proteção;
   5. Invariantes financeiros de exclusão de transferências de capital (depósitos/saques).
-* **Entregáveis:** Documento normativo de Especificação Matemática e Invariantes Contábeis do EddyTrader.
-* **Fora de Escopo:** Implementação de código MQL5 executável ou compilação.
-* **Critério de Conclusão:** Todas as fórmulas e comportamentos numéricos especificados matematicamente e prontos para codificação.
+* **Entregáveis:**
+  * [10 — Especificação Matemática da Perda e Janelas](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
+  * [ADR 0003 — Modelo Matemático de Janelas Operacionais e Baseline de Reabertura](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
+* **Critério de Conclusão:** Resolução do GAP-006, reavaliação do GAP-005, definição dos invariantes INV-001 a INV-010, validação documental dos cenários MATH-01 a MATH-10 e zero código executável criado.
 
 ---
 
 ### W04 — Especificação Normativa da Máquina de Estados
-* **Status:** Planejada
+* **Status:** **PRÓXIMA ETAPA RECOMENDADA**
 * **Objetivo:** Desenhar o modelo formal determinístico da FSM (estados, eventos, transições, estruturas de dados MQL5 e política de reconstrução determinística de estado após restart do terminal).
 * **Entregáveis:** Documento de Especificação Técnica da Máquina de Estados e Estrutura de Módulos MQL5.
 * **Fora de Escopo:** Implementação de código MQL5 executável.
@@ -125,4 +126,5 @@ flowchart TD
 * Escopo e Proibições: [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
 * Critérios do MVP: [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+* Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)

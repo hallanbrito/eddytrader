@@ -14,8 +14,8 @@ Este documento cataloga de forma explícita e rastreável todas as ambiguidades 
 | **GAP-002** | Composição Contábil do Resultado Relevante | **RESOLVIDA** | Resultado = Realizado do Dia + Flutuante Atual. Custos de trading (comissões e swaps) são obrigatoriamente incluídos. Movimentações de capital (depósitos, saques e créditos) são estritamente excluídas. | [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) / Decisão D03, D04 e D05 |
 | **GAP-003** | Consistência Temporal do Bloqueio e Virada de Dia | **RESOLVIDA (ATUALIZADA)** | Duração relativa contínua de **4 horas** a partir do disparo ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$). A virada de `00:00:00` não encerra nem afeta a duração. Bloqueio ativo prevalece até completar 4 horas mesmo com início de novo dia. Desbloqueio encerra evento e inicia nova janela operacional via baseline. *(Interpretação anterior de horário absoluto substituída por esclarecimento do PO)*. | [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) / Decisões D07, D08, D09, D10 e D11 |
 | **GAP-004** | Escopo de Atuação na Conta (Símbolos e Magics) | **RESOLVIDA** | Escopo global da conta: todas as posições, todas as ordens pendentes, todos os símbolos, manuais ou de outros robôs. Sem filtros para o MVP. | Decisão D13 / [RN-004](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-004) / [RN-005](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-005) |
-| **GAP-005** | Persistência vs. Reconstrução de Estado após Restart | **RESOLVIDA PARCIALMENTE / ADIADA PARA W03/W04** | Princípio de produto para MVP: priorizar reconstrução determinística baseada no histórico nativo do MT5 sobre persistência em arquivos (YAGNI). Avaliar em W03/W04 se baseline intradiária requer arquivo local mínimo. | Decisão D12 |
-| **GAP-006** | Especificação Matemática da Baseline de Reabertura | **ADIADA PARA W03** | Conceito de nova janela aprovado na W02. A formulação matemática exata, equações de referência e invariantes numéricos serão especificados na W03. | [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) / W03 Roadmap |
+| **GAP-005** | Persistência vs. Reconstrução de Estado após Restart | **PENDENTE** | Requisitos mínimos conceituais definidos matematicamente (estado, baseline, $t_{\text{trigger}}$, $t_{\text{unlock}}$, identidade de janela). Suficiência dos dados nativos disponibilizados pelo MT5/MQL5 para reconstrução determinística ainda não foi tecnicamente validada (análise pendente para W04/W05). | [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md) / Decisão D12 |
+| **GAP-006** | Especificação Matemática da Baseline de Reabertura | **RESOLVIDA (W03)** | Modelo algébrico formalizado: $B_0 = 0$ para a primeira janela do dia; $B_n = D(t_{\text{reopen}, n})$ para janelas subsequentes pós-desbloqueio. O resultado da janela é $W_n(t) = D(t) - B_n$, prevenindo deterministicamente o falso rebloqueio imediato. | [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md) / [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md) |
 
 ---
 
@@ -51,8 +51,16 @@ Este documento cataloga de forma explícita e rastreável todas as ambiguidades 
 * **Racional:** A salvaguarda de perda diária visa à sobrevivência da conta como um todo.
 
 ### GAP-005 — Persistência e Reconstrução de Estado após Reinicialização
-* **Status:** **RESOLVIDA PARCIALMENTE / ADIADA PARA W03/W04**
-* **Decisão:** Para o MVP, adotar a reconstrução determinística a partir do histórico nativo como primeira escolha técnica, reduzindo arquivos e complexidade. A necessidade de arquivo auxiliar mínimo para a baseline intradiária e tempo de bloqueio será delimitada na W03/W04.
+* **Status:** **PENDENTE — Requisitos mínimos definidos matematicamente; suficiência dos dados nativos ainda não validada.**
+* **Análise da W03:** A modelagem matemática demonstrou que a reconstrução determinística de determinadas situações (como reinicialização durante bloqueio ativo ou janelas subsequentes com $n \ge 1$) exige que informações como estado operacional vigente, baseline da janela ($B_n$), instante de acionamento ($t_{\text{trigger}}$), instante mínimo de liberação ($t_{\text{unlock}}$) e identidade da janela sejam recuperáveis ou deterministicamente deriváveis.
+* **Questão Aberta:** A W03 delimitou essa necessidade sob o prisma puramente conceitual. Ainda **não foi demonstrado** se os dados nativos disponibilizados pelo MT5/MQL5 são suficientes para derivar integralmente o estado necessário, ou se demandarão mecanismo auxiliar de armazenamento. A decisão sobre persistência em arquivo local, Global Variables, heurísticas determinísticas ou reconstrução nativa permanece aberta para a FSM da W04 e o Spike Técnico da W05.
+* **Documentos Vinculados:** [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md#10-analise-de-continuidade-e-reinicializacao-do-sistema-restart), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
+
+### GAP-006 — Especificação Matemática da Baseline de Reabertura
+* **Status:** **RESOLVIDA (W03)**
+* **Decisão:** A métrica operacional é segmentada em janelas sequenciais $J_n$. A baseline é definida como $B_0 = 0$ para a primeira janela do dia e $B_n = D(t_{\text{reopen}, n})$ para as janelas abertas após o encerramento do bloqueio de 4 horas. O resultado da janela é $W_n(t) = D(t) - B_n$ e a proteção dispara compulsoriamente em $W_n(t) \le -L$.
+* **Racional:** Elimina matematicamente a possibilidade de falso rebloqueio no mesmo tick da liberação ($W_n(t_{\text{reopen}}) = 0 > -L$), ao mesmo tempo em que preserva integralmente o histórico contábil da corretora.
+* **Documentos Vinculados:** [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 
@@ -86,5 +94,6 @@ Este documento cataloga de forma explícita e rastreável todas as ambiguidades 
 
 * Origem dos Requisitos: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+* Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
 * Alinhamento no Cronograma: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)

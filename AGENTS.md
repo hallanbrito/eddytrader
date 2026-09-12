@@ -51,10 +51,11 @@ Ao iniciar uma nova sessão de trabalho ou receber uma nova missão, o agente de
 7. [docs/05-REGRAS-DE-NEGOCIO.md](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md) — Regras normativas de cálculo e ação.
 8. [docs/06-ARQUITETURA-CONCEITUAL.md](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md) — Decomposição conceitual e máquina de estados.
 9. [docs/08-RISCOS-E-QUESTOES-ABERTAS.md](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md) — GAPs, decisões técnicas e riscos ativos.
-10. [docs/adr/](file:///C:/Projetos/eddytrader/docs/adr/) — Registros formais de decisões arquiteturais (ADR 0001 e 0002).
-11. [docs/09-ROADMAP.md](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md) — Etapas planejadas e critérios da W corrente.
-12. [docs/04-CASOS-DE-USO.md](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md) — Casos de uso do operador e do sistema.
-13. [docs/07-MVP.md](file:///C:/Projetos/eddytrader/docs/07-MVP.md) — Critérios de aceite do produto mínimo viável.
+10. [docs/10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md) — Especificação matemática da perda, janelas operacionais e baseline.
+11. [docs/adr/](file:///C:/Projetos/eddytrader/docs/adr/) — Registros formais de decisões arquiteturais (ADR 0001, 0002 e 0003).
+12. [docs/09-ROADMAP.md](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md) — Etapas planejadas e critérios da W corrente.
+13. [docs/04-CASOS-DE-USO.md](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md) — Casos de uso do operador e do sistema.
+14. [docs/07-MVP.md](file:///C:/Projetos/eddytrader/docs/07-MVP.md) — Critérios de aceite do produto mínimo viável.
 
 ---
 

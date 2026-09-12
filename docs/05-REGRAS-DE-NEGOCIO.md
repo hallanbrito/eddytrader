@@ -19,23 +19,24 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
 
 ### RN-002 — Base de Cálculo do Prejuízo Acumulado Relevante
 * **Enunciado:** O cálculo da perda relevante da conta segue rigorosamente o horário do servidor (`00:00:00` a `23:59:59`):
-  $$\text{RESULTADO\_RELEVANTE} = \text{RESULTADO\_REALIZADO\_DO\_DIA} + \text{RESULTADO\_FLUTUANTE\_ATUAL}$$
-  $$\text{PERDA\_DIÁRIA} = -(\text{RESULTADO\_RELEVANTE})$$
+  $$D(t) = R_{\text{day}}(t) + F(t)$$
+  $$W_n(t) = D(t) - B_n$$
+  onde $B_0 = 0$ na primeira janela e $B_n = D(t_{\text{reopen}, n})$ para janelas subsequentes pós-desbloqueio.
 * **Regras de Composição:**
-  1. **Custos Operacionais Inclusos:** Comissões de corretagem, emolumentos e taxas de rolagem (*swaps*) são obrigatoriamente somados ao resultado das operações fechadas e posições abertas para refletir a variação patrimonial líquida real do trading.
-  2. **Movimentações de Capital Excluídas:** Depósitos, saques e ajustes de créditos administrativos são estritamente excluídos do cálculo da perda operacional. Um saque não aumenta a perda de trading e um depósito não mascara prejuízos operacionais.
+  1. **Resultado Realizado Abrangente:** $R_{\text{day}}(t)$ representa o resultado econômico líquido realizado de trading ocorrido no dia operacional até o instante $t$ (lucros, prejuízos, comissões, swaps e taxas operacionais), sem dupla contagem (INV-009) e sem vinculação restrita ao fechamento de posições.
+  2. **Movimentações de Capital Excluídas:** Depósitos, saques e ajustes de créditos administrativos são estritamente excluídos do cálculo da perda operacional (INV-008). Um saque não aumenta a perda de trading e um depósito não mascara prejuízos operacionais.
   3. **Virada do Dia Operacional:** Às `00:00:00` do servidor, perdas realizadas em dias anteriores deixam de compor a métrica diária. Posições que permaneçam abertas continuam contribuindo com seu resultado flutuante atual no novo dia.
-* **Rastreabilidade:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md).
+* **Rastreabilidade:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 
 ## 3. Regras de Detecção do Limite
 
 ### RN-003 — Condição de Disparo da Proteção
-* **Enunciado:** A proteção de emergência deve ser acionada no exato momento em que o resultado relevante for menor ou igual ao negativo do limite configurado:
-  $$\text{RESULTADO\_RELEVANTE} \le - \text{LIMITE\_CONFIGURADO} \iff \text{PERDA\_DIÁRIA} \ge \text{LIMITE\_CONFIGURADO}$$
+* **Enunciado:** A proteção de emergência deve ser acionada no exato momento em que o resultado da janela ativa for menor ou igual ao negativo do limite configurado:
+  $$W_n(t) \le -L \iff P_n(t) \ge L$$
 * **Comportamento:** O disparo é incondicional e imediato no primeiro tick ou evento que atestar a violação.
-* **Rastreabilidade:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md).
+* **Rastreabilidade:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 
@@ -63,7 +64,7 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
 * **Enunciado:** Após a execução das ordens de fechamento e cancelamento, o sistema deve ingressar obrigatoriamente no estado `BLOCKED`.
 * **Comportamento:**
   1. Novas operações abertas ou enviadas durante o período de bloqueio não devem permanecer ativas na conta.
-  2. O sistema mantém exibição visual contínua no gráfico informando o bloqueio ativo, o instante do acionamento e a previsão exata de liberação ($t_{\text{bloqueio}} + 4\text{h}$) no relógio oficial do servidor.
+  2. O sistema mantém exibição visual contínua no gráfico informando o bloqueio ativo, o instante do acionamento ($t_{\text{trigger}}$) e a previsão temporal mínima de liberação ($t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$) no relógio oficial do servidor.
 * **Rastreabilidade:** [RF-008](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-008), [RF-009](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-009).
 
 ---
@@ -71,27 +72,26 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
 ## 7. Regras de Desbloqueio, Horários e Novas Janelas
 
 ### RN-007 — Duração do Bloqueio e Condição Temporal de Liberação
-* **Enunciado:** O bloqueio vigora por um período contínuo de **4 horas** contado a partir do instante em que a proteção foi acionada:
-  $$\text{INSTANTE\_DE\_LIBERAÇÃO} = \text{INSTANTE\_DO\_BLOQUEIO} + 4\text{ HORAS}$$
-  $$T_{\text{unlock}} = T_0 + 4\text{h}$$
+* **Enunciado:** O bloqueio temporal vigora por um período mínimo contínuo de **4 horas** contado a partir do instante em que a proteção foi acionada:
+  $$t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h} = t_{\text{trigger}} + 14.400\text{s}$$
 * **Regras Normativas de Tempo:**
-  1. **Duração Relativa:** A duração é sempre de 4 horas a partir do evento de bloqueio.
-     * Exemplo A: limite violado às `10:00` $\implies$ liberação às `14:00`.
-     * Exemplo B: limite violado às `14:25` $\implies$ liberação às `18:25`.
-  2. **Independência entre Ciclo Contábil e Ciclo de Bloqueio:** A virada de dia às `00:00:00` do servidor NÃO afeta a duração do bloqueio.
-     * Exemplo C: limite violado às `23:30` $\implies$ liberação às `03:30` do dia seguinte.
-  3. **Novo Dia sob Bloqueio Ativo:** Mesmo que um novo dia operacional comece enquanto o bloqueio estiver ativo, a proteção continua soberana até completar integralmente as 4 horas.
-  4. **Critério de Liberação:** O sistema permanece em `BLOCKED` no intervalo $[T_0, T_{\text{unlock}})$ e torna-se elegível à liberação quando o relógio do servidor satisfizer $T \ge T_{\text{unlock}}$.
-* **Rastreabilidade:** [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+  1. **Duração Relativa:** A restrição temporal é sempre de 4 horas a partir do evento de bloqueio ($t_{\text{unlock}}$).
+  2. **Independência entre Ciclo Contábil e Ciclo de Bloqueio:** A virada de dia às `00:00:00` do servidor NÃO afeta $t_{\text{unlock}}$. Bloqueio acionado às `23:30` tem $t_{\text{unlock}} = \text{03:30}$ do dia seguinte.
+  3. **Condição Necessária vs. Suficiente:** O cumprimento da janela temporal mínima $[t_{\text{trigger}}, t_{\text{unlock}})$ é condição necessária para liberação, mas a reabertura efetiva ($t_{\text{reopen}} \ge t_{\text{unlock}}$) requer a ausência de condições de proteção ativas.
+* **Rastreabilidade:** [RF-002](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-002), [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
 
 ### RN-008 — Nova Janela Operacional e Baseline de Reabertura
-* **Enunciado:** Ao completar exatamente as 4 horas ($T \ge T_{\text{unlock}}$), o evento de bloqueio é encerrado, o sistema remove a trava e **inicia uma nova janela operacional de proteção intradiária**.
+* **Enunciado:** Ao atingir as condições de liberação em $t_{\text{reopen}}$ (com $t_{\text{reopen}} \ge t_{\text{unlock}}$), o evento de bloqueio é encerrado, o sistema remove a trava e **inicia uma nova janela operacional de proteção intradiária** $J_n$ ($n \ge 1$).
 * **Comportamento Normativo:**
-  1. O histórico de perdas anteriores do dia não é apagado (integridade contábil).
-  2. Para evitar o rebloqueio instantâneo (*desbloquear $\to$ detectar perda do dia já violada $\to$ bloquear imediatamente*), o sistema estabelece uma **`baseline_de_reabertura`**.
-  3. A proteção na nova janela observará novas perdas incorridas a partir do momento da liberação.
-  4. A formulação matemática exata da baseline pertence ao escopo da W03.
-* **Rastreabilidade:** [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+  1. O histórico contábil de perdas anteriores do dia não é apagado (integridade dos dados).
+  2. Para evitar o rebloqueio instantâneo, o sistema estabelece a baseline no instante real da reabertura:
+     $$B_n = D(t_{\text{reopen}, n})$$
+  3. O resultado da nova janela inicia em zero:
+     $$W_n(t_{\text{reopen}, n}) = D(t_{\text{reopen}, n}) - B_n = 0$$
+  4. A proteção na nova janela observará novas perdas incorridas a partir do momento da liberação:
+     $$W_n(t) \le -L$$
+  5. Se o bloqueio tiver cruzado a meia-noite, a baseline da reabertura é calculada sobre a contabilidade do novo dia operacional no instante efetivo da reabertura ($B_{\text{new}} = D_{\text{novo\_dia}}(t_{\text{reopen}})$).
+* **Rastreabilidade:** [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 

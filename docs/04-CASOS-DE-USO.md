@@ -64,12 +64,12 @@ flowchart LR
   2. O sistema totaliza os negócios fechados no intervalo de `00:00:00` até o horário corrente do servidor, incluindo lucros/prejuízos brutos, comissões e swaps.
   3. O sistema ignora qualquer transação de depósito, saque ou ajuste financeiro não oriundo de negociação.
   4. O sistema varre todas as posições abertas na conta (incluindo posições carregadas de dias anteriores) e obtém o flutuante líquido atual.
-  5. O sistema calcula o $\text{RESULTADO\_RELEVANTE} = \text{Realizado} + \text{Flutuante}$ (ou novas perdas relativas à baseline ativa, caso esteja em nova janela pós-desbloqueio).
-  6. O sistema compara o valor com o limite de perda. Se não houver violação, atualiza o gráfico e permanece em `MONITORING`.
+  5. O sistema calcula o resultado diário $D(t) = R_{\text{day}}(t) + F(t)$ e o resultado da janela ativa $W_n(t) = D(t) - B_n$ (com $B_0 = 0$ na primeira janela e $B_n = D(t_{\text{reopen}, n})$ após desbloqueios, conforme [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)).
+  6. O sistema compara o valor com o limite de perda ($W_n(t) \le -L$). Se não houver violação, atualiza o gráfico e permanece em `MONITORING`.
 * **Exceções:**
   * **E1 — Falha transitória na consulta do histórico:** O sistema retenta no próximo evento sem corromper o estado atual.
-* **Pós-condições:** Métrica de perda atualizada com precisão líquida real.
-* **Requisitos Relacionados:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [RN-002](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-002), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md).
+* **Pós-condições:** Métrica de perda da janela atualizada com precisão líquida real.
+* **Requisitos Relacionados:** [RF-003](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-003), [RF-004](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-004), [RN-002](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-002), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 
@@ -78,21 +78,21 @@ flowchart LR
 * **Ator Principal:** Sistema (EddyTrader EA).
 * **Objetivo:** Reconhecer a violação da perda máxima e disparar compulsoriamente a liquidação e o cálculo da janela de 4 horas de bloqueio.
 * **Pré-condições:** Sistema em estado `MONITORING`.
-* **Gatilho:** A perda apurada atinge ou supera o limite monetário diário (ou o limite da janela operacional ativa).
+* **Gatilho:** O resultado da janela operacional ativa atinge ou supera o limite monetário ($W_n(t) \le -L$).
 * **Fluxo Principal:**
-  1. O sistema atesta que $\text{RESULTADO\_RELEVANTE} \le -\text{LIMITE\_CONFIGURADO}$.
+  1. O sistema atesta que $W_n(t) \le -L$ (ou equivalentemente, $P_n(t) \ge L$).
   2. O sistema carimba o instante oficial de acionamento da proteção no relógio do servidor:
-     $$T_0 = t_{\text{bloqueio}}$$
+     $$T_0 = t_{\text{trigger}} = t$$
   3. O sistema define a janela temporal contínua de bloqueio de 4 horas:
-     $$T_{\text{unlock}} = T_0 + 4\text{h}$$
+     $$T_{\text{unlock}} = T_0 + 4\text{h} = t_{\text{trigger}} + 14.400\text{s}$$
      O sistema deve permanecer no estado bloqueado no intervalo:
-     $$[T_0, T_{\text{unlock}})$$
+     $$[t_{\text{trigger}}, t_{\text{unlock}})$$
      e tornar-se elegível à liberação quando:
-     $$T \ge T_{\text{unlock}}$$
-  4. O sistema registra o evento de disparo no Diário do MT5 detalhando $T_0$ e $T_{\text{unlock}}$.
+     $$t \ge t_{\text{unlock}}$$
+  4. O sistema registra o evento de disparo no Diário do MT5 detalhando $t_{\text{trigger}}$ e $t_{\text{unlock}}$.
   5. O sistema transita para o estado transitório `LIQUIDATING` e inicia [UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens).
-* **Pós-condições:** Sistema em modo de contenção ativo (`LIQUIDATING`) com janela temporal $[T_0, T_{\text{unlock}})$ formalizada.
-* **Requisitos Relacionados:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [RN-003](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-003), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+* **Pós-condições:** Sistema em modo de contenção ativo (`LIQUIDATING`) com janela temporal $[t_{\text{trigger}}, t_{\text{unlock}})$ formalizada.
+* **Requisitos Relacionados:** [RF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-005), [RN-003](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-003), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 
@@ -160,16 +160,17 @@ flowchart LR
 * **Ator Principal:** Sistema (EddyTrader EA).
 * **Objetivo:** Desarmar a proteção temporal após completadas as 4 horas, permitir novas negociações e iniciar uma nova janela de monitoramento intradiário.
 * **Pré-condições:** Sistema no estado `BLOCKED`.
-* **Gatilho:** O relógio oficial do servidor alcança ou ultrapassa o instante de liberação ($T \ge T_{\text{unlock}}$, com $T_{\text{unlock}} = T_0 + 4\text{h}$).
+* **Gatilho:** O relógio oficial do servidor alcança o término do bloqueio temporal de 4 horas ($t \ge t_{\text{unlock}}$, com $t_{\text{unlock}} = t_{\text{trigger}} + 14.400\text{s}$) e todas as condições de segurança são satisfeitas no instante de reabertura ($t_{\text{reopen}} \ge t_{\text{unlock}}$).
 * **Fluxo Principal:**
-  1. O sistema constata que transcorreram 4 horas contínuas desde o bloqueio ($T \ge T_{\text{unlock}}$).
+  1. O sistema constata que transcorreram pelo menos 4 horas contínuas desde o bloqueio ($t \ge t_{\text{unlock}}$) e que não restam pendências operacionais ativas.
   2. O sistema registra no Diário do MT5 a remoção do bloqueio.
   3. O sistema atualiza o comentário do gráfico: *"Bloqueio removido. Operações liberadas."*.
-  4. O sistema encerra o evento de proteção anterior e **estabelece a `baseline_de_reabertura`** para a nova janela operacional (D09).
+  4. O sistema encerra o evento de proteção anterior e **estabelece a `baseline_de_reabertura`** para a nova janela operacional $J_n$ no instante efetivo da reabertura ($B_n = D(t_{\text{reopen}, n})$).
   5. O sistema remove as travas de bloqueio e transita para `MONITORING`.
-  6. Novas perdas a partir da liberação passam a ser monitoradas frente ao limite configurado.
-* **Pós-condições:** Operações permitidas; nova janela operacional ativa sem rebloqueio instantâneo.
-* **Requisitos Relacionados:** [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [RN-007](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-007), [RN-008](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-008), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md).
+  6. O resultado da nova janela inicia em $W_n(t_{\text{reopen}, n}) = D(t_{\text{reopen}, n}) - B_n = 0$, prevenindo falso rebloqueio imediato.
+  7. Novas perdas a partir da liberação passam a ser monitoradas frente ao limite configurado ($W_n(t) \le -L$).
+* **Pós-condições:** Operações permitidas; nova janela operacional ativa com baseline estabelecida.
+* **Requisitos Relacionados:** [RF-010](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-010), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-012](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-012), [RN-007](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-007), [RN-008](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-008), [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md), [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 
 ---
 

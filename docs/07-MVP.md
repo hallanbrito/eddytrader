@@ -16,7 +16,7 @@ Constituem o escopo obrigatório e inegociável do MVP:
 
 1. **Parâmetros de Entrada e Regras Temporais Básicas:**
    * Limite de perda diária em valor monetário positivo (`InpDailyLossLimit`).
-   * Duração de bloqueio aprovada de **4 horas contínuas** contadas a partir do momento em que o limite for atingido no relógio do servidor ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$). *(Corrigido: substitui a interpretação preliminar de horário fixo absoluto diário)*.
+   * Duração de bloqueio aprovada de **4 horas contínuas** contadas a partir do momento em que o limite for atingido no relógio do servidor ($t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$), com reabertura efetiva em $t_{\text{reopen}} \ge t_{\text{unlock}}$. *(Corrigido: substitui a interpretação preliminar de horário fixo absoluto diário)*.
 2. **Cálculo da Perda Operacional Líquida:**
    * Apuração contínua do resultado realizado do dia (`00:00:00` às `23:59:59` do servidor) somado ao flutuante atual.
    * Inclusão obrigatória de comissões e taxas de swap.
@@ -30,9 +30,9 @@ Constituem o escopo obrigatório e inegociável do MVP:
    * Solicitações de remoção para 100% das ordens pendentes na conta.
    * Continuidade do processamento das demais ordens em caso de falha individual de execução.
 5. **Regras Temporais de Bloqueio e Janelas:**
-   * Duração contínua de 4 horas: ao ser acionada a proteção, o bloqueio vigora ininterruptamente pelo período $[t_{\text{bloqueio}}, t_{\text{bloqueio}} + 4\text{h})$.
+   * Duração contínua de 4 horas: ao ser acionada a proteção, o bloqueio vigora ininterruptamente pelo período $[t_{\text{trigger}}, t_{\text{unlock}})$, onde $t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$.
    * Independência de virada de dia: se a virada de `00:00:00` ocorrer durante o bloqueio, o bloqueio permanece soberano e ativo no novo dia operacional até completar as 4 horas.
-   * Desbloqueio e nova janela: após as 4 horas completas, a liberação encerra o evento e estabelece a `baseline_de_reabertura` para evitar falso rebloqueio imediato.
+   * Desbloqueio e nova janela: transcorrido o período mínimo de 4 horas ($t \ge t_{\text{unlock}}$) e satisfeitas as condições operacionais de segurança, a liberação efetiva ocorre em $t_{\text{reopen}} \ge t_{\text{unlock}}$, encerrando o evento e estabelecendo a baseline $B_n = D(t_{\text{reopen}, n})$ para a nova janela operacional ($W_n = D - B_n$), evitando falso rebloqueio imediato conforme [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md).
 6. **Reconstrução Determinística após Reinicialização:**
    * O EA prioriza a inferência de seu estado a partir do histórico nativo de transações e posições do MT5 ao reiniciar.
 7. **Feedback Visual Simples e Log Nativo:**
@@ -76,7 +76,7 @@ O MVP só será considerado concluído e aceito após 100% de aprovação nos te
 | **TC-MVP-03A** | Bloqueio Matutino (Cenário 1) | Limite violado às 10:00 do servidor. Duração: 4 horas. | Disparo da proteção às 10:00. | Sistema entra em `BLOCKED` e permanece bloqueado até as **14:00** do mesmo dia ($10:00 + 4\text{h}$). |
 | **TC-MVP-03B** | Bloqueio Vespertino (Cenário 2) | Limite violado às 14:25 do servidor. Duração: 4 horas. | Disparo da proteção às 14:25. | Sistema entra em `BLOCKED` e permanece bloqueado até as **18:25** do mesmo dia ($14:25 + 4\text{h}$). |
 | **TC-MVP-04** | Bloqueio Noturno e Virada de Dia (Cenários 3 e 4) | Limite violado às 23:30 do servidor. Duração: 4 horas. | Passagem das `00:00:00` (início do novo dia operacional). | O bloqueio **permanece ativo** ininterruptamente durante e após a meia-noite até completar 4 horas, com liberação prevista e executada às **03:30** do dia seguinte. |
-| **TC-MVP-05** | Desbloqueio e Nova Janela Operacional | Bloqueado com perda de -$ 510. Transcorridas as 4 horas de bloqueio ($T \ge T_{\text{unlock}}$). | Relógio do servidor alcança $T_{\text{unlock}}$. | Bloqueio removido; mensagens informam liberação; baseline estabelecida; sistema não rebloqueia imediatamente no mesmo tick. |
+| **TC-MVP-05** | Desbloqueio e Nova Janela Operacional | Bloqueado com perda de -$ 510. Transcorridas as 4 horas de bloqueio ($t \ge t_{\text{unlock}}$). | Relógio do servidor alcança $t_{\text{unlock}}$ e condições de segurança satisfeitas ($t_{\text{reopen}} \ge t_{\text{unlock}}$). | Bloqueio removido; mensagens informam liberação; baseline $B_n = D(t_{\text{reopen}, n})$ estabelecida; sistema não rebloqueia imediatamente no mesmo tick. |
 | **TC-MVP-06** | Flutuante de Posição Antiga na Virada do Dia | Início do dia (`00:00:00`). Posição antiga aberta com flutuante de -$ 600. Limite: $ 500. | Primeiro tick do novo dia. | O flutuante negativo viola o limite do novo dia; a proteção é acionada imediatamente. |
 | **TC-MVP-07** | Resiliência a Falha de Fechamento Individual | 2 posições abertas; uma em ativo com mercado fechado. | Disparo da proteção. | Erro registrado em log; posição viável encerrada; sistema permanece em estado de proteção/bloqueio ativo sem retornar a monitoramento normal. |
 | **TC-MVP-08** | Reconstrução de Estado após Reinicialização | Sistema em `BLOCKED` acionado às 14:25 (liberação para 18:25). Terminal fechado e reaberto às 15:30. | Execução do `OnInit()`. | O EA lê o histórico, detecta bloqueio ativo vigente ($15:30 < 18:25$) e restaura o estado `BLOCKED` até as 18:25 sem intervenção manual. |
@@ -87,5 +87,6 @@ O MVP só será considerado concluído e aceito após 100% de aprovação nos te
 
 * Requisitos Base: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+* Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
 * Próximos Passos: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)

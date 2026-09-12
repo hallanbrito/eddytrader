@@ -56,7 +56,7 @@ graph TD
 * **Responsabilidade:** Consultar o relógio do servidor de negociação, varrer o histórico diário (`00:00:00` às `23:59:59` do servidor), filtrar negócios de trading (ignorando depósitos/saques) e ler o flutuante líquido atual.
 
 ### 2.2. Avaliador de Perda Operacional e Janelas (*Risk & Window Evaluator*)
-* **Responsabilidade:** Calcular o $\text{RESULTADO\_RELEVANTE}$ somando realizado líquido (com comissões e swaps) e flutuante atual, e medir a distância até o limite considerando a janela operacional ativa (incluindo eventual `baseline_de_reabertura`).
+* **Responsabilidade:** Calcular o resultado diário consolidado $D(t) = R_{\text{day}}(t) + F(t)$ somando realizado líquido (com comissões e swaps) e flutuante atual, e calcular o resultado da janela ativa $W_n(t) = D(t) - B_n$ (com $B_0 = 0$ e $B_n = D(t_{\text{reopen}, n})$ para $n \ge 1$), confrontando com o limite $L$ segundo [10-ESPECIFICACAO-MATEMATICA.md](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md).
 
 ### 2.3. Máquina de Estados Finita (*FSM - Finite State Machine*)
 * **Responsabilidade:** Controlar o ciclo de vida da proteção, governando as transições entre vigilância, contenção, bloqueio programado e liberação.
@@ -68,7 +68,7 @@ graph TD
 * **Responsabilidade:** Emitir requisições de remoção para 100% das ordens pendentes existentes na conta.
 
 ### 2.6. Controlador de Bloqueio e Janelas (*Block & Schedule Controller*)
-* **Responsabilidade:** Gerenciar a janela temporal de bloqueio de 4 horas a partir do acionamento ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$), retendo o bloqueio após a meia-noite caso a janela atravesse a virada de dia e administrando o gatilho de reabertura de nova janela.
+* **Responsabilidade:** Gerenciar a janela temporal de bloqueio de 4 horas a partir do acionamento ($t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$), retendo o bloqueio após a meia-noite caso a janela atravesse a virada de dia e administrando o gatilho de reabertura de nova janela em $t_{\text{reopen}} \ge t_{\text{unlock}}$.
 
 ### 2.7. Apresentador Visual e Logger (*Visual HUD & Journal Logger*)
 * **Responsabilidade:** Exibir no gráfico informações claras de status (relógio do servidor, limite, perdas, instante do bloqueio e previsão de liberação após 4h) e auditar eventos com carimbo de tempo do servidor no Diário do MT5.
@@ -125,8 +125,8 @@ stateDiagram-v2
 
 1. **`MONITORING` $\to$ `LIQUIDATING`:** Disparada imediatamente quando o resultado financeiro atinge ou supera o limite negativo da janela.
 2. **`LIQUIDATING` $\to$ `BLOCKED`:** Se todas as ordens e posições forem tratadas, entra em bloqueio. Se houver falhas de fechamento em ativos específicos, o sistema **não retorna a monitoramento normal**; transita para bloqueio/contenção retida até que todas as pendências sejam resolvidas.
-3. **`BLOCKED` $\to$ `UNBLOCKING`:** Ocorre estritamente quando o relógio do servidor alcança o término das 4 horas contínuas ($T \ge T_{\text{unlock}}$, onde $T_{\text{unlock}} = T_0 + 4\text{h}$). A passagem pelas `00:00:00` não desarma o bloqueio ativo, mantendo a proteção integral até o término das 4 horas.
-4. **`UNBLOCKING` $\to$ `MONITORING`:** Encerra o evento de bloqueio, calcula a `baseline_de_reabertura` para evitar falso rebloqueio imediato no mesmo tick e reabre o monitoramento para novas perdas na nova janela.
+3. **`BLOCKED` $\to$ `UNBLOCKING`:** Ocorre estritamente quando o relógio do servidor alcança o término das 4 horas contínuas ($t \ge t_{\text{unlock}}$, onde $t_{\text{unlock}} = t_{\text{trigger}} + 4\text{h}$). A passagem pelas `00:00:00` não desarma o bloqueio ativo, mantendo a proteção integral até o término das 4 horas.
+4. **`UNBLOCKING` $\to$ `MONITORING`:** Ocorre no instante da reabertura efetiva $t_{\text{reopen}} \ge t_{\text{unlock}}$ assim que satisfeitas todas as condições de segurança (ausência de pendências residuais). Encerra o evento de bloqueio, calcula a `baseline_de_reabertura` ($B_n = D(t_{\text{reopen}, n})$) para evitar falso rebloqueio imediato no mesmo tick e reabre o monitoramento para novas perdas na nova janela.
 
 ---
 
@@ -134,9 +134,9 @@ stateDiagram-v2
 
 A decisão arquitetural de produto para o MVP ([D12](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)) estabelece:
 
-* **Prioridade Absoluta:** O EA deve reconstruir seu estado a partir dos registros contábeis nativos da conta e do histórico do terminal MT5.
+* **Prioridade Absoluta:** O EA deve reconstruir seu estado a partir dos registros contábeis nativos da conta e do histórico do terminal MT5 sempre que possível.
 * **Racional (KISS / YAGNI):** Evitar arquivos proprietários duplicados no disco reduz pontos de falha, corrupção de dados e complexidade operacional.
-* **Reserva Técnica:** A W03/W04 delimitará se informações que não possam ser estritamente inferidas do histórico bruto (como a baseline de uma reabertura intradiária recente após restart do terminal) demandarão um registro leve em disco ou se há modelagem algorítmica puramente inferida.
+* **Delimitação da W03:** A modelagem matemática comprovou que na primeira janela ($J_0$), a reconstrução é puramente determinística via histórico nativo ($B_0 = 0$). Contudo, em reinicialização durante bloqueio ativo ou janelas subsequentes ($J_n$ com $n \ge 1$), o sistema necessita que as variáveis mínimas de estado — em especial $(t_{\text{trigger}}, t_{\text{unlock}})$, $B_n$ e o estado operacional ativo — estejam disponíveis ou sejam reconstituídas de forma confiável. A viabilidade de inferir essas variáveis unívoca e exclusivamente a partir dos dados nativos do terminal MT5 sem persistência auxiliar ainda não foi validada empiricamente, permanecendo como questão aberta pendente de spike técnico (GAP-005). O modelo formal de dados e sua arquitetura de transição serão detalhados na FSM da W04.
 
 ---
 
@@ -161,5 +161,6 @@ Conforme mantido no catálogo de questões abertas ([DQ-001](file:///C:/Projetos
 * Requisitos Associados: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
 * Casos de Uso: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md) e [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
+* Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md) e [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
 * Planejamento Incremental: [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md)
