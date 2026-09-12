@@ -1,0 +1,47 @@
+# EddyTrader — Gerenciador de Perda Diária para MetaTrader 5
+
+O **EddyTrader** é uma ferramenta de controle de risco operacional projetada exclusivamente para a plataforma **MetaTrader 5 (MT5)**, desenvolvida nativamente em **MQL5**.
+
+Sua única responsabilidade é monitorar continuamente o resultado da conta do operador, fechar todas as posições abertas e cancelar ordens pendentes quando um limite monetário diário de perda for atingido, bloqueando novas operações até um horário pré-configurado.
+
+O EddyTrader **não é** uma estratégia de trading: não abre operações, não gera sinais, não define stops individuais e não busca gerenciar metas de lucro.
+
+---
+
+## Estágio Atual do Projeto
+
+* **Fase:** `W01 — Fundação Documental e Normativa`
+* **Status:** Documentação inicial e normativa concluída segundo o **Método C.H.**
+* **Aviso Importante:** **Nesta fase não há código executável (`.mq5`, `.mqh`, `.ex5`), protótipos funcionais ou robôs operacionais neste repositório.** O desenvolvimento de código será realizado estritamente nas etapas futuras aprovadas.
+
+---
+
+## Tecnologia Alvo
+
+* **Linguagem:** MQL5 (MetaQuotes Language 5) puro.
+* **Plataforma:** MetaTrader 5 (versão desktop, 64-bit).
+* **Ambiente de Execução:** Local e nativo no terminal, sem DLLs, sem banco de dados e sem dependências externas.
+* **Compatibilidade:** Contas Demo e Real (modos Netting e Hedging).
+
+---
+
+## Navegação na Documentação Normativa
+
+Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/`](file:///C:/Projetos/eddytrader/docs):
+
+1. [00 — Manifesto](file:///C:/Projetos/eddytrader/docs/00-MANIFESTO.md): Filosofia, problema fundamental e princípios de proteção.
+2. [01 — Visão Geral](file:///C:/Projetos/eddytrader/docs/01-VISAO-GERAL.md): Descrição funcional, público-alvo e fluxo conceitual.
+3. [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md): O que está dentro, fora e o que é terminantemente proibido.
+4. [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md): Requisitos Funcionais (RF) e Não-Funcionais (RNF) rastreáveis.
+5. [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md): Especificação dos fluxos operacionais e exceções.
+6. [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md): Regras de cálculo, disparo, liquidação e bloqueio.
+7. [06 — Arquitetura Conceitual](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md): Módulos conceituais, máquina de estados e questão do bloqueio no MT5.
+8. [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md): Menor produto viável e critérios objetivos de teste e aceite.
+9. [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo formal de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
+10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos próximos Work Packages (W).
+
+---
+
+## Instruções para Agentes Autônomos
+
+Consulte obrigatoriamente o arquivo [AGENTS.md](file:///C:/Projetos/eddytrader/AGENTS.md) antes de propor qualquer modificação ou atuar neste repositório.
