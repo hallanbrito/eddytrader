@@ -20,14 +20,16 @@ Segundo Release Candidate do EddyTrader — W09 Trader UX & Configuração On-Ch
 - precedência do limite configurado pelo trader sobre o valor padrão de `InpMaxLoss`;
 - bloqueio estrito contra alterações de limite durante o período de proteção (`BLOCKED`, `LIQUIDATING`, `PROTECTION_TRIGGERED`, `REOPENING`, `INIT`);
 - avaliação de risco imediata ao aplicar novo limite (disparo instantâneo se $W \le -L_{\text{novo}}$);
-- alternância instantânea entre modo compacto e detalhado (`[ DETALHES ]` / `[ PAINEL COMPACTO ]`);
+- alternância instantânea entre modo compacto e detalhado (`[ DETALHES ]` / `[ ← VOLTAR AO RESUMO ]`);
+- desobstrução vertical automática de 80px para coexistência perfeita com o painel One Click Trading (BUY/SELL) do MT5 no canto superior esquerdo;
+- substituição integral de `Comment()` por painel gráfico nativo dedicado no modo detalhado (`EDDY_HUD_DETAILED`), mantendo a tela limpa e o botão de retorno sempre acessível;
 - novo parâmetro de seleção visual `InpHudMode` (`COMPACT`, `DETAILED`, `OFF`) e controle de offsets (`InpHudCorner`, `InpHudOffsetX`, `InpHudOffsetY`);
 - higienização total de objetos gráficos via prefixo unificado `EddyHUD_` e limpeza no `OnDeinit`.
 
 ### Validação
 
 - build oficial: **0 errors / 0 warnings** em todos os 6 alvos;
-- regressão formal expandida para **52/52 PASS** (`W06-01..20`, `W07R-01..04`, `W08R-01..04`, `W09R-01..24`);
+- regressão formal expandida para **57/57 PASS** (`W06-01..20`, `W07R-01..06`, `W08R-01..02`, `W09R-01..29`);
 - documentação operacional e de onboarding 100% atualizadas.
 
 ### Pendente

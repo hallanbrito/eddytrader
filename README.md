@@ -90,7 +90,7 @@ Pronto. O gráfico exibirá o painel compacto do EddyTrader com status amigável
 | `InpHudMode` | `EDDY_HUD_COMPACT` | Modo do painel (`COMPACT`, `DETAILED`, `OFF`) |
 | `InpHudCorner` | `CORNER_LEFT_UPPER` | Canto do gráfico onde o painel é exibido |
 | `InpHudOffsetX` | `20` | Deslocamento horizontal do painel em pixels |
-| `InpHudOffsetY` | `30` | Deslocamento vertical do painel em pixels |
+| `InpHudOffsetY` | `10` | Deslocamento vertical adicional em pixels (com margem de 80px para One Click Trading) |
 | `InpTimerIntervalMs` | `500` | Frequência de monitoramento interno (ms) |
 | `InpDeviationPoints` | `10` | Desvio máximo usado nos fechamentos de emergência |
 
