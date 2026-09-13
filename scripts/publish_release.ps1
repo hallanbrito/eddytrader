@@ -1,6 +1,7 @@
 param(
     [string]$Version = "1.0.0-rc1",
-    [string]$Target = "master"
+    [string]$Target = "master",
+    [string]$NotesFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,12 +11,31 @@ $packageScript = Join-Path $PSScriptRoot "package_release.ps1"
 $binary = Join-Path $repoRoot "src\EddyTrader.ex5"
 $zipPath = Join-Path $repoRoot ("dist\EddyTrader-" + $Version + ".zip")
 $checksums = Join-Path $repoRoot ("dist\CHECKSUMS-" + $Version + ".txt")
-$notes = Join-Path $repoRoot ("docs\17-RELEASE-NOTES-" + $Version + ".md")
 $tag = "v" + $Version
+
+if ([string]::IsNullOrWhiteSpace($NotesFile)) {
+    $matches = Get-ChildItem -Path (Join-Path $repoRoot "docs") -File |
+        Where-Object { $_.Name -like "*RELEASE-NOTES-$Version.md" }
+
+    if ($matches.Count -eq 1) {
+        $notes = $matches[0].FullName
+    } elseif ($matches.Count -eq 0) {
+        throw ("Release notes não encontradas para " + $Version + ". Use -NotesFile para informar o caminho.")
+    } else {
+        throw ("Mais de um arquivo de release notes encontrado para " + $Version + ". Use -NotesFile para escolher explicitamente.")
+    }
+} else {
+    if ([System.IO.Path]::IsPathRooted($NotesFile)) {
+        $notes = $NotesFile
+    } else {
+        $notes = Join-Path $repoRoot $NotesFile
+    }
+}
 
 Write-Host "==============================================================="
 Write-Host (" EddyTrader GitHub Release Publisher - " + $Version)
 Write-Host "==============================================================="
+Write-Host ("Release notes: " + $notes)
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Host ""
