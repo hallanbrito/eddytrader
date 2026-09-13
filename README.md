@@ -10,10 +10,10 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W04 — Especificação Normativa da Máquina de Estados`
-* **Status:** Concluída. FSM normativa estruturada em 6 estados conceituais (`INIT`, `MONITORING`, `PROTECTION_TRIGGERED`, `LIQUIDATING`, `BLOCKED`, `REOPENING`), guards determinísticos, catálogo de transições proibidas, invariantes de controle e protocolo de recuperação pós-restart formalizados via [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md) e [11-MAQUINA-DE-ESTADOS.md](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md) segundo o **Método C.H.**
-* **Próxima Fase:** `W05 — Spike Técnico MT5/MQL5 (Garantias e Bloqueio)`.
-* **Aviso Importante:** **Nesta fase não há código executável (`.mq5`, `.mqh`, `.ex5`), protótipos funcionais ou robôs operacionais neste repositório.** O desenvolvimento de código será realizado estritamente nas etapas futuras aprovadas.
+* **Fase:** `W05 — Spike Técnico MT5/MQL5: Garantias, Eventos, Liquidação, Bloqueio e Recuperação`
+* **Status:** Concluída. Evidências documentais, de compilação e locais consolidadas em [12-SPIKE-TECNICO-MT5.md](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md) e [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md) (Status: *Proposed*). Resolução do GAP-005 quanto ao mecanismo técnico (persistência de $\mathbf{D}_{\text{min\_recovery}}$ via Global Variables do Terminal), comprovação documental do fechamento universal por ticket para Netting e Hedging, formalização da neutralização reativa (com latência pendente de medição em Demo) e compilação com 100% de sucesso (0 erros, 0 warnings) de todos os probes em `research/w05/` com o compilador oficial MetaEditor 64 (build 6193).
+* **Próxima Fase:** `W06 — Primeiro Expert Advisor Mínimo do EddyTrader`.
+* **Aviso Importante:** Os códigos criados na W05 residem estritamente em `research/w05/` e são artefatos experimentais de laboratório (`NOT PRODUCTION CODE`). O Expert Advisor de produção (`src/EddyTrader.mq5`) será implementado apenas na W06 após aprovação formal.
 
 ---
 
@@ -42,12 +42,14 @@ Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/
 10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos Work Packages (W).
 11. [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md): Modelagem determinística da perda, janelas operacionais, baseline e invariantes.
 12. [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md): Modelagem determinística da FSM, catálogo de estados, guards, transições proibidas e recuperação pós-restart.
+13. [12 — Spike Técnico MT5/MQL5](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md): Relatório exaustivo de garantias técnicas, eventos, liquidação, bloqueio e persistência no MT5.
 
 ### Registros de Decisões Arquiteturais (ADRs)
 * [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)
 * [ADR 0002 — Composição da Perda Operacional](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md)
 * [ADR 0003 — Modelo Matemático de Janelas e Baseline](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md)
 * [ADR 0004 — Máquina de Estados e Recuperação](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)
+* [ADR 0005 — Garantias Técnicas do MT5 e Estratégia de Recuperação](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md)
 
 ---
 
