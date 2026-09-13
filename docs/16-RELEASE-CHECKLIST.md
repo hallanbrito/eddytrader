@@ -23,8 +23,8 @@ A tabela abaixo registra formalmente os gates de qualidade, estabilidade e confo
 | **Auditoria de Retcodes** | Logs detalhados com ticket, símbolo, retcode numérico e descrição oficial. | **APROVADO [X]** | Auditoria implementada em `PositionClose` e `OrderDelete`. |
 | **Auditoria Estática de Código** | Ausência absoluta de padrões perigosos, filtros parciais ou dependências externas. | **APROVADO [X]** | 0 ocorrências de `TODO`, `FIXME`, `HACK`, `ACCOUNT_EQUITY`, filtros de `Magic`, `PositionClose(symbol)`, `Sleep` ou `while(true)`. |
 | **Isolamento de Credenciais** | Ausência de senhas, tokens, servidores ou logins fixados no código-fonte de produção. | **APROVADO [X]** | Login e servidor obtidos dinamicamente via API nativa de conta (`AccountInfoInteger`, `AccountInfoString`). |
-| **Documentação Operacional** | Manual de operação, instalação, recuperação de desastres e troubleshooting. | **APROVADO [X]** | Documento [`docs/15-GUIA-OPERACIONAL.md`](file:///C:/Projetos/eddytrader/docs/15-GUIA-OPERACIONAL.md) concluído. |
-| **Release Notes RC** | Especificação clara do escopo do RC, limites e avisos de risco. | **APROVADO [X]** | Documento [`docs/17-RELEASE-NOTES-1.0.0-rc1.md`](file:///C:/Projetos/eddytrader/docs/17-RELEASE-NOTES-1.0.0-rc1.md) concluído. |
+| **Documentação Operacional** | Manual de operação, instalação, recuperação de desastres e troubleshooting. | **APROVADO [X]** | Documento [`docs/15-GUIA-OPERACIONAL.md`](15-GUIA-OPERACIONAL.md) concluído. |
+| **Release Notes RC** | Especificação clara do escopo do RC, limites e avisos de risco. | **APROVADO [X]** | Documento [`docs/17-RELEASE-NOTES-1.0.0-rc1.md`](17-RELEASE-NOTES-1.0.0-rc1.md) concluído. |
 | **Working Tree Git Limpo** | Controle de versão higienizado, sem binários `.ex5` rastreados e sem arquivos órfãos. | **APROVADO [X]** | `.gitignore` configurado para `*.ex5`, `*.log`, `test_results.txt`. |
 
 ---
