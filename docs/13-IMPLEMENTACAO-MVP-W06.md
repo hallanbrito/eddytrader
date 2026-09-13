@@ -85,20 +85,23 @@ Para garantir que o conjunto mínimo de recuperação $\mathbf{D}_{\text{min\_re
 | `EDDY_<LOGIN>_EVENT_ID` | `double` (cast `ulong`) | Identificador único idempotente do evento de proteção. |
 | `EDDY_<LOGIN>_DAY` | `double` (cast `datetime`) | Timestamp de início do dia contábil (`00:00:00`). |
 | `EDDY_<LOGIN>_OWNER` | `double` (cast `ulong`) | Identificador numérico da instância proprietária do lock da conta. |
-| `EDDY_<LOGIN>_HEARTBEAT` | `double` (cast `datetime`) | Carimbo de vida (timestamp) da instância proprietária para detecção de timeout/crash (> 5s). |
+| `EDDY_<LOGIN>_HEARTBEAT` | `double` (cast `datetime`) | Carimbo de vida (timestamp) da instância proprietária para detecção de timeout/crash (> 15s). |
 
 Toda alteração de estado executa `GlobalVariablesFlush()`, garantindo escrita imediata no disco (`gvars.dat`).
 
-### 3.2. Guarda de Instância Única Robusta: Protocolo OWNER + HEARTBEAT (DQ-005)
+### 3.2. Guarda de Instância Única Robusta: Protocolo Atômico OWNER + HEARTBEAT com CAS (DQ-005)
 
-A implementação inicial da guarda utilizava apenas um timestamp de heartbeat, o que abria o risco de uma segunda instância concorrente, ao falhar em `OnInit()`, invocar `OnDeinit()` e apagar inadvertidamente o heartbeat da instância legítima. Para eliminar definitivamente essa vulnerabilidade de concorrência, a W06 implementou o protocolo **OWNER + HEARTBEAT**:
+A implementação inicial da guarda utilizava apenas um timestamp de heartbeat, o que abria o risco de uma segunda instância concorrente, ao falhar em `OnInit()`, invocar `OnDeinit()` e apagar inadvertidamente o heartbeat da instância legítima. Posteriormente, a aquisição direta e a remoção de chaves no encerramento mantinham janelas de corrida. Para eliminar matematicamente qualquer condição de concorrência ou aquisição dupla, o EddyTrader implementa o protocolo **OWNER + HEARTBEAT Puramente Atômico via CAS**:
 
 1. **Identificador Único de Instância (`g_instance_id`):** Gerado dinamicamente em `GenerateInstanceId()` combinando timestamp de alta precisão, contador de ticks e o ID do gráfico (`ChartID()`). O identificador é restrito a valores $< 2^{53}$ ($\approx 9 \times 10^{15}$), garantindo representação exata sem perda de precisão no tipo `double` das Global Variables do MT5.
-2. **Posse Atômica por Compare-And-Swap (CAS):** A posse inicial é adquirida via `GlobalVariableSetOnCondition(owner_key, g_instance_id, current_owner)`. Se não houver proprietário prévio ou se o lease estiver expirado (> 5 segundos sem renovação de heartbeat), a nova instância realiza a assunção limpa (*takeover*) atomicamente.
-3. **Renovação Exclusiva pelo Proprietário:** O heartbeat é renovado a cada ciclo de `OnTimer()` exclusivamente se `g_is_owner == true` e a chave `EDDY_<LOGIN>_OWNER` contiver o ID da instância corrente.
-4. **Liberação Estrita no `OnDeinit()`:** A função `ReleaseInstanceGuard()` verifica rigidamente `if(!g_is_owner) return;`. Uma instância secundária que receba `INIT_FAILED` **não tem permissão** para apagar ou alterar as chaves do proprietário legítimo.
-5. **Assunção Pós-Crash (*Takeover* Limpo):** Se uma instância sofrer encerramento anômalo ou travamento do terminal, após 5 segundos o lease expira e uma nova instância pode assumir a conta via CAS atômico.
-6. **Detecção de Zumbi e Postura *Fail-Closed*:** Se uma instância que perdeu a posse retornar à execução e detectar que `owner != g_instance_id`, ela entra imediatamente em postura `FAIL-CLOSED` (`g_is_owner = false`, `g_safe_to_operate = false`, estado `EDDY_STATE_INIT`), cessa o timer, **não executa nenhuma ação destrutiva**, não interfere na FSM e **não toca nas variáveis do novo proprietário**.
+2. **Bootstrap Neutro (`OWNER = 0`):** Se a chave `EDDY_<LOGIN>_OWNER` ainda não existir, é inicializada com o valor neutro `0.0` (sem proprietário). Como todas as instâncias escrevem o mesmo valor neutro `0.0`, nenhuma adquire posse no bootstrap.
+3. **Posse Atômica por Compare-And-Swap (CAS `0 -> ID`):** A posse inicial da guarda livre é adquirida exclusivamente através de `GlobalVariableSetOnCondition(owner_key, (double)g_instance_id, 0.0)`. Somente a instância cujo CAS retornar `true` adquire a titularidade. Se duas instâncias competirem na inicialização, exatamente uma vencerá o CAS atômico.
+4. **Renovação Exclusiva pelo Proprietário:** O heartbeat é renovado a cada ciclo de `OnTimer()` exclusivamente se `g_is_owner == true` e `OWNER == g_instance_id`.
+5. **Liberação Estritamente Atômica via CAS (`ID -> 0`) e Preservação de Heartbeat:** A função `ReleaseInstanceGuard()` executa CAS atômico `GlobalVariableSetOnCondition(owner_key, 0.0, (double)g_instance_id)`. É **terminantemente proibido** apagar a chave `HEARTBEAT` no `OnDeinit`. Preservar o carimbo do último heartbeat elimina a corrida em que uma instância em encerramento apagava o heartbeat recém-escrito por um novo proprietário. Como `OWNER == 0` define o lock como semanticamente livre, a próxima instância adquire via CAS `0 -> ID` e sobrescreve o heartbeat imediatamente, sem qualquer espera de lease.
+6. **Assunção Pós-Crash (*Takeover* Limpo via CAS `old_owner -> new_owner`):** Se uma instância sofrer encerramento anômalo ou congelamento do terminal, após 15 segundos (`INSTANCE_LEASE_TIMEOUT_SECONDS = 15`) o lease expira e uma nova instância pode assumir a conta via CAS atômico (`old_owner -> new_owner`). Durante o período de lease ativa ($\le 15$ s), qualquer tentativa de takeover por outra instância é sumariamente rejeitada.
+7. **Detecção de Zumbi, Postura *Fail-Closed* e Imunidade no `OnDeinit` Tardio:**
+   * Se uma instância antiga acordar após takeover e tentar `UpdateHeartbeat()`, ela detecta `owner != g_instance_id`, desarma seu timer (`EventKillTimer()`) e entra imediatamente em postura `FAIL-CLOSED` (`g_is_owner = false`, `g_safe_to_operate = false`, estado `EDDY_STATE_INIT`), cessando qualquer ação.
+   * Se a instância zumbi executar posteriormente seu `OnDeinit()` tardio, o CAS de liberação `GlobalVariableSetOnCondition(owner_key, 0.0, (double)zombie_id)` **falha atomicamente** pois o proprietário atual é o novo EA. Dessa forma, a instância zumbi não altera `OWNER`, não apaga `HEARTBEAT` e não corrompe a titularidade da nova instância ativa.
 
 ### 3.3. Cálculo Contábil Exato (W03 / ADR 0002 / ADR 0003)
 
@@ -171,7 +174,7 @@ A suíte formal de testes foi implementada em [`tests/test_fsm_w06.mq5`](file://
   [PASS] W06-16: Guarda Instância Única: Segunda instância rejeitada quando lock ativo e recente
   [PASS] W06-17: Guarda Instância Única: INIT_FAILED em instância secundária não remove lock de outra instância
   [PASS] W06-18: Guarda Instância Única: Apenas a instância dona tem permissão de liberar o lock no OnDeinit
-  [PASS] W06-19: Guarda Instância Única: Assunção (takeover) permitida após lease expirado (>5s)
+  [PASS] W06-19: Guarda Instância Única: Assunção (takeover) permitida após lease expirado (>15s)
   [PASS] W06-20: Guarda Instância Única: Instância zumbi pós-takeover entra em FAIL-CLOSED sem ações destrutivas
 ==================================================================
  Resumo da Bateria W06: Total=20 | Aprovados=20 | Falhas=0
@@ -200,7 +203,7 @@ A suíte formal de testes foi implementada em [`tests/test_fsm_w06.mq5`](file://
 | **W06-16** | Concorrência: Segunda instância com lock ativo | Rejeitada imediatamente com `INIT_FAILED` | APROVADO | **PASS** |
 | **W06-17** | Concorrência: `INIT_FAILED` em instância secundária | `OnDeinit` secundário não remove lock nem heartbeat do dono | APROVADO | **PASS** |
 | **W06-18** | Concorrência: Descarregamento no `OnDeinit` | Apenas o legítimo dono (`g_is_owner == true`) remove o lock | APROVADO | **PASS** |
-| **W06-19** | Resiliência: Crash do dono e lease expirado (> 5s) | Nova instância assume a conta (*takeover*) via CAS atômico | APROVADO | **PASS** |
+| **W06-19** | Resiliência: Crash do dono e lease expirado (> 15s) | Nova instância assume a conta (*takeover*) via CAS atômico | APROVADO | **PASS** |
 | **W06-20** | Resiliência: Instância zumbi acorda pós-takeover | Detecta perda de posse, transita a `FAIL-CLOSED`, sem ações destrutivas | APROVADO | **PASS** |
 
 ---

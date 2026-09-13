@@ -4,7 +4,7 @@ if (-not (Test-Path $metaeditor)) {
     exit 1
 }
 
-$files = Get-ChildItem "C:\Projetos\eddytrader\research\w05\*.mq5"
+$files = Get-ChildItem "C:\Projetos\eddytrader\src\*.mq5", "C:\Projetos\eddytrader\tests\*.mq5"
 foreach ($f in $files) {
     $mq5Path = $f.FullName
     $logPath = [System.IO.Path]::ChangeExtension($mq5Path, ".log")

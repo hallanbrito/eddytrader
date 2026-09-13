@@ -1,9 +1,9 @@
 # ADR 0005 — Garantias Técnicas do MT5, Neutralização de Bloqueio e Estratégia de Recuperação
 
-* **Status:** Proposta (*Proposed*)
+* **Status:** Proposta (*Proposed*) — Componentes de Persistência, Concorrência e FSM Aceitos; Validação de Neutralização em Mercado ao Vivo Aberto Pendente (`LIVE-01`)
 * **Data:** 2026-09-13
 * **Autor:** Agente Autônomo (Método C.H.)
-* **Contexto:** [W05 — Spike Técnico MT5/MQL5: Garantias, Eventos, Liquidação, Bloqueio e Recuperação](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md)
+* **Contexto:** [W05 — Spike Técnico MT5/MQL5](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md) / [W07 — Homologação Operacional](file:///C:/Projetos/eddytrader/docs/14-HOMOLOGACAO-W07.md)
 * **Decisões Relacionadas:** [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md) e [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)
 
 ---
@@ -12,14 +12,14 @@
 
 A W01 definiu a fundação do produto; a W02 estabeleceu as regras temporais e de risco; a W03 formalizou a matemática das janelas operacionais; e a W04 normatizou a Máquina de Estados Finita (FSM). 
 
-Essas definições conceituais continham hipóteses técnicas que foram confrontadas na W05 contra a documentação oficial da MetaQuotes, a compilação com o compilador oficial MetaEditor 64 (build 6193) e testes em ambiente local:
+Essas definições conceituais continham hipóteses técnicas que foram confrontadas na W05 contra a documentação oficial da MetaQuotes, implementadas na W06 e formalmente validadas na W07 em ambiente de conta Demo conectada (`ActivTradesCorp-Server`, build 6193):
 1. Como o sistema percebe alterações comerciais em tempo real (`OnTrade` vs `OnTradeTransaction`)?
 2. Um Expert Advisor consegue impedir fisicamente ordens manuais disparadas no terminal antes de chegarem ao servidor da corretora?
 3. Como garantir que a liquidação e o inventário funcionem igualmente em contas Netting e Hedging sem ambiguidades?
 4. Qual função de tempo do MT5 reflete o avanço real do relógio do servidor sem congelar na ausência de cotações?
 5. O conjunto mínimo de recuperação $\mathbf{D}_{\text{min\_recovery}}$ pode ser reconstruído unicamente a partir do histórico nativo de deals ou requer persistência própria ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistência-e-reconstrução-de-estado-após-reinicialização))?
 
-Como o ambiente laboratorial da W05 operou sem sessão remota ativa com a corretora (`Invalid account`), o status deste ADR é mantido como **Proposed**, assegurando que decisões que dependem de preenchimento real de mercado e medição de latência em rede não sejam tratadas prematuramente como certezas definitivas.
+Com a conclusão da homologação W07, as decisões de persistência, guarda de instância única e tratamento de falhas remotas foram confirmadas em sessão ao vivo. A neutralização reativa foi validada no Strategy Tester com os ticks do broker, mantendo-se a validação de rede ponta a ponta sob mercado aberto catalogada no teste formal **`LIVE-01`**. Por esse motivo, este ADR é mantido granularmente como **Proposta (*Proposed*)**, com aceitação definitiva condicionada à conclusão do `LIVE-01`.
 
 ---
 

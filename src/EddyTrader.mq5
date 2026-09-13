@@ -144,6 +144,8 @@ void ClearState()
 //+------------------------------------------------------------------+
 //| Proteção Contra Múltiplas Instâncias: OWNER + HEARTBEAT LEASE    |
 //+------------------------------------------------------------------+
+const int INSTANCE_LEASE_TIMEOUT_SECONDS = 15;
+
 ulong GenerateInstanceId()
 {
    datetime now = TimeCurrent();
@@ -162,27 +164,18 @@ bool AcquireInstanceGuard()
    string hb_key    = GVKey("HEARTBEAT");
    datetime now     = TimeCurrent();
 
-   // 1. Se a chave de owner não existe, tenta posse inicial
+   // 1. Bootstrap: se a chave de owner ainda não existe na conta, cria com valor neutro 0 (sem proprietário).
+   // Como todas as instâncias escrevem o mesmo valor neutro 0, nenhuma adquire posse neste passo.
    if(!GlobalVariableCheck(owner_key))
    {
-      GlobalVariableSet(owner_key, (double)g_instance_id);
-      GlobalVariableSet(hb_key, (double)now);
+      GlobalVariableSet(owner_key, 0.0);
       GlobalVariablesFlush();
-
-      if(GlobalVariableCheck(owner_key) && (ulong)GlobalVariableGet(owner_key) == g_instance_id)
-      {
-         g_is_owner = true;
-         PrintFormat("[EddyTrader] Guarda adquirida com sucesso (Posse Inicial): InstanceID=#%I64u na conta %I64u",
-                     g_instance_id, g_account_login);
-         return true;
-      }
    }
 
-   // 2. Se a chave de owner existe, verifica o proprietário
    ulong current_owner = (ulong)GlobalVariableGet(owner_key);
 
-   // Mesma instância readquirindo (ex: recarga / troca de timeframe)
-   if(current_owner == g_instance_id)
+   // 2. Mesma instância readquirindo (ex: recarga / troca de timeframe)
+   if(current_owner == g_instance_id && g_instance_id != 0)
    {
       GlobalVariableSet(hb_key, (double)now);
       GlobalVariablesFlush();
@@ -190,41 +183,73 @@ bool AcquireInstanceGuard()
       return true;
    }
 
-   // 3. Outro proprietário registrado: inspeciona validade do heartbeat
-   if(GlobalVariableCheck(hb_key))
+   // 3. Caso OWNER == 0: guarda livre (sem proprietário).
+   // O heartbeat antigo é ignorado (sem efeito semântico quando OWNER==0).
+   // Aquisição inicial puramente atômica via CAS: 0 -> g_instance_id
+   if(current_owner == 0)
    {
-      datetime last_hb = (datetime)GlobalVariableGet(hb_key);
-      if(now >= last_hb && (now - last_hb) < 5)
+      if(GlobalVariableSetOnCondition(owner_key, (double)g_instance_id, 0.0))
       {
-         // Lease ativa de outro proprietário legítimo: rejeição obrigatória
-         PrintFormat("[EddyTrader] ERRO FATAL: Instância concorrente ativa detectada na conta %I64u (Owner=#%I64u, heartbeat há %d s). Abortando carga.",
-                     g_account_login, current_owner, (int)(now - last_hb));
+         // Sucesso exclusivo no CAS: concede ownership
+         GlobalVariableSet(hb_key, (double)now);
+         GlobalVariablesFlush();
+         g_is_owner = true;
+         PrintFormat("[EddyTrader] Guarda adquirida com sucesso via CAS (0 -> Owner=#%I64u) na conta %I64u",
+                     g_instance_id, g_account_login);
+         return true;
+      }
+      // Se CAS falhou, outra instância concorrente venceu a disputa atômica.
+      current_owner = (ulong)GlobalVariableGet(owner_key);
+   }
+
+   // 4. Caso OWNER != 0 e OWNER != g_instance_id: outro proprietário registrado
+   if(current_owner != 0 && current_owner != g_instance_id)
+   {
+      // Avalia a validade temporal da lease
+      if(GlobalVariableCheck(hb_key))
+      {
+         datetime last_hb = (datetime)GlobalVariableGet(hb_key);
+         if(last_hb > 0 && now >= last_hb && (now - last_hb) <= INSTANCE_LEASE_TIMEOUT_SECONDS)
+         {
+            // Lease ativa e recente de outro proprietário legítimo: rejeição obrigatória
+            PrintFormat("[EddyTrader] ERRO FATAL: Instância concorrente ativa detectada na conta %I64u (Owner=#%I64u, heartbeat há %d s <= limite %d s). Abortando carga.",
+                        g_account_login, current_owner, (int)(now - last_hb), INSTANCE_LEASE_TIMEOUT_SECONDS);
+            g_is_owner = false;
+            return false;
+         }
+      }
+      else
+      {
+         // Fail-safe: OWNER != 0 com HEARTBEAT inexistente é tratado como lease inconsistente
+         PrintFormat("[EddyTrader] AVISO: OWNER=#%I64u ativo com HEARTBEAT ausente. Tratando como lease inconsistente.",
+                     current_owner);
+      }
+
+      // Heartbeat expirado (> 15s) ou lease inconsistente: tentativa de takeover atômico via CAS (current_owner -> g_instance_id)
+      PrintFormat("[EddyTrader] AVISO: Lease da instância anterior (#%I64u) expirada (>%d s). Tentando takeover atômico...",
+                  current_owner, INSTANCE_LEASE_TIMEOUT_SECONDS);
+
+      if(GlobalVariableSetOnCondition(owner_key, (double)g_instance_id, (double)current_owner))
+      {
+         // Takeover atômico bem-sucedido: grava imediatamente o novo heartbeat
+         GlobalVariableSet(hb_key, (double)now);
+         GlobalVariablesFlush();
+         g_is_owner = true;
+         PrintFormat("[EddyTrader] Takeover de guarda concluído via CAS! (#%I64u -> Novo Owner=#%I64u) na conta %I64u",
+                     current_owner, g_instance_id, g_account_login);
+         return true;
+      }
+      else
+      {
+         // Conflito no takeover: outra instância assumiu ou o proprietário mudou
+         PrintFormat("[EddyTrader] ERRO FATAL: Conflito no takeover da guarda. Outra instância assumiu ownership. Abortando carga.");
          g_is_owner = false;
          return false;
       }
    }
 
-   // 4. Heartbeat expirado (> 5s): tentativa de takeover atômico via Compare-And-Swap (CAS)
-   PrintFormat("[EddyTrader] AVISO: Lease da instância anterior (#%I64u) expirada. Tentando takeover atômico...",
-               current_owner);
-
-   if(GlobalVariableSetOnCondition(owner_key, (double)g_instance_id, (double)current_owner))
-   {
-      // Takeover atômico bem-sucedido
-      GlobalVariableSet(hb_key, (double)now);
-      GlobalVariablesFlush();
-      g_is_owner = true;
-      PrintFormat("[EddyTrader] Takeover de guarda concluído! Novo Owner=#%I64u na conta %I64u",
-                  g_instance_id, g_account_login);
-      return true;
-   }
-   else
-   {
-      // Outra instância assumiu durante a tentativa
-      PrintFormat("[EddyTrader] ERRO FATAL: Conflito no takeover da guarda. Outra instância assumiu ownership. Abortando carga.");
-      g_is_owner = false;
-      return false;
-   }
+   g_is_owner = false;
+   return false;
 }
 
 void UpdateHeartbeat()
@@ -241,6 +266,7 @@ void UpdateHeartbeat()
       g_is_owner        = false;
       g_safe_to_operate = false;
       g_current_state   = EDDY_STATE_INIT;
+      EventKillTimer();
       // Invariante de contenção: não encerra posições, não altera FSM da conta e não altera o lock de terceiros
       return;
    }
@@ -250,7 +276,7 @@ void UpdateHeartbeat()
 
 void ReleaseInstanceGuard()
 {
-   // REGRA DE SEGURANÇA: Somente o proprietário legítimo pode liberar a guarda
+   // REGRA DE SEGURANÇA: Somente se a instância foi marcada como proprietária
    if(!g_is_owner)
    {
       PrintFormat("[EddyTrader] OnDeinit: Instância #%I64u NÃO é proprietária do lock. Guarda preservada intacta.",
@@ -259,15 +285,25 @@ void ReleaseInstanceGuard()
    }
 
    string owner_key = GVKey("INSTANCE_OWNER");
-   if(GlobalVariableCheck(owner_key) && (ulong)GlobalVariableGet(owner_key) == g_instance_id)
+
+   // Liberação estritamente atômica via CAS: minha_instancia -> 0
+   if(GlobalVariableSetOnCondition(owner_key, 0.0, (double)g_instance_id))
    {
-      GlobalVariableDel(owner_key);
-      GlobalVariableDel(GVKey("HEARTBEAT"));
       GlobalVariablesFlush();
-      PrintFormat("[EddyTrader] Guarda liberada com sucesso pela instância proprietária #%I64u.",
+      PrintFormat("[EddyTrader] Guarda liberada com sucesso via CAS (Owner=#%I64u -> 0).",
                   g_instance_id);
    }
+   else
+   {
+      // Falha no CAS: ownership já havia sido perdida (ex: takeover ocorrido antes do OnDeinit)
+      PrintFormat("[EddyTrader] OnDeinit: Falha no CAS de liberação. Instância #%I64u já não possuía a titularidade do lock. Nenhuma metadata alterada.",
+                  g_instance_id);
+   }
+
    g_is_owner = false;
+   // INVARIANTE CRÍTICO: NÃO apagar a chave HEARTBEAT.
+   // Deixar o último heartbeat persistido elimina a corrida onde o antigo dono apaga o heartbeat do novo dono.
+   // Como OWNER == 0, o heartbeat é semanticamente irrelevante e o próximo adquirente o sobrescreverá.
 }
 
 //+------------------------------------------------------------------+
@@ -830,9 +866,9 @@ int OnInit()
                // t_now >= g_t_unlock
                if(CheckSafetyConditions())
                {
-                  // T02C: Reabertura imediata pós-restart
-                  PrintFormat("[EddyTrader] T02C: Bloqueio vencido e condições seguras. Conduzindo a REOPENING.");
-                  g_current_state = EDDY_STATE_BLOCKED; // transitará no ProcessFSM
+                  // T02C: Reabertura imediata pós-restart: INIT -> REOPENING -> MONITORING
+                  PrintFormat("[EddyTrader] T02C: Bloqueio vencido e condições seguras. Conduzindo formalmente INIT -> REOPENING -> MONITORING.");
+                  TransitionTo(EDDY_STATE_REOPENING);
                }
                else
                {

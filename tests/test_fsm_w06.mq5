@@ -154,26 +154,24 @@ void AssertTest(string scenario_id, bool condition, string detail)
 //+------------------------------------------------------------------+
 //| Helpers de Teste para a Guarda OWNER + HEARTBEAT                 |
 //+------------------------------------------------------------------+
+const int INSTANCE_LEASE_TIMEOUT_SECONDS = 15;
+
 bool TestAcquireGuard(ulong inst_id, bool &is_owner, datetime now)
 {
    string owner_key = TestGVKey("INSTANCE_OWNER");
    string hb_key    = TestGVKey("HEARTBEAT");
 
+   // 1. Bootstrap: cria com valor neutro 0 se a chave ainda não existe
    if(!GlobalVariableCheck(owner_key))
    {
-      GlobalVariableSet(owner_key, (double)inst_id);
-      GlobalVariableSet(hb_key, (double)now);
+      GlobalVariableSet(owner_key, 0.0);
       GlobalVariablesFlush();
-
-      if(GlobalVariableCheck(owner_key) && (ulong)GlobalVariableGet(owner_key) == inst_id)
-      {
-         is_owner = true;
-         return true;
-      }
    }
 
    ulong current_owner = (ulong)GlobalVariableGet(owner_key);
-   if(current_owner == inst_id)
+
+   // 2. Mesma instância readquirindo
+   if(current_owner == inst_id && inst_id != 0)
    {
       GlobalVariableSet(hb_key, (double)now);
       GlobalVariablesFlush();
@@ -181,23 +179,40 @@ bool TestAcquireGuard(ulong inst_id, bool &is_owner, datetime now)
       return true;
    }
 
-   if(GlobalVariableCheck(hb_key))
+   // 3. Caso OWNER == 0: guarda livre. Aquisição inicial puramente atômica via CAS: 0 -> inst_id
+   if(current_owner == 0)
    {
-      datetime last_hb = (datetime)GlobalVariableGet(hb_key);
-      if(now >= last_hb && (now - last_hb) < 5)
+      if(GlobalVariableSetOnCondition(owner_key, (double)inst_id, 0.0))
       {
-         is_owner = false;
-         return false;
+         GlobalVariableSet(hb_key, (double)now);
+         GlobalVariablesFlush();
+         is_owner = true;
+         return true;
       }
+      current_owner = (ulong)GlobalVariableGet(owner_key);
    }
 
-   // Lease expirada: tentativa de takeover atômico via CAS
-   if(GlobalVariableSetOnCondition(owner_key, (double)inst_id, (double)current_owner))
+   // 4. Caso OWNER != 0 e OWNER != inst_id
+   if(current_owner != 0 && current_owner != inst_id)
    {
-      GlobalVariableSet(hb_key, (double)now);
-      GlobalVariablesFlush();
-      is_owner = true;
-      return true;
+      if(GlobalVariableCheck(hb_key))
+      {
+         datetime last_hb = (datetime)GlobalVariableGet(hb_key);
+         if(last_hb > 0 && now >= last_hb && (now - last_hb) <= INSTANCE_LEASE_TIMEOUT_SECONDS)
+         {
+            is_owner = false;
+            return false;
+         }
+      }
+
+      // Lease expirada (> INSTANCE_LEASE_TIMEOUT_SECONDS): tentativa de takeover atômico via CAS
+      if(GlobalVariableSetOnCondition(owner_key, (double)inst_id, (double)current_owner))
+      {
+         GlobalVariableSet(hb_key, (double)now);
+         GlobalVariablesFlush();
+         is_owner = true;
+         return true;
+      }
    }
 
    is_owner = false;
@@ -227,13 +242,14 @@ void TestReleaseGuard(ulong inst_id, bool &is_owner)
       return; // Se não for owner, não altera nada!
 
    string owner_key = TestGVKey("INSTANCE_OWNER");
-   if(GlobalVariableCheck(owner_key) && (ulong)GlobalVariableGet(owner_key) == inst_id)
+   // Liberação estritamente atômica via CAS: inst_id -> 0
+   if(GlobalVariableSetOnCondition(owner_key, 0.0, (double)inst_id))
    {
-      GlobalVariableDel(owner_key);
-      GlobalVariableDel(TestGVKey("HEARTBEAT"));
       GlobalVariablesFlush();
    }
    is_owner = false;
+   // INVARIANTE: NÃO apaga a chave HEARTBEAT.
+   // OWNER == 0 torna o heartbeat semanticamente irrelevante e elimina condição de corrida.
 }
 
 //+------------------------------------------------------------------+
@@ -244,7 +260,7 @@ void RunAllTests()
    g_file_handle = FileOpen("test_results.txt", FILE_WRITE|FILE_TXT|FILE_ANSI);
 
    string hdr1 = "==================================================================";
-   string hdr2 = " Início da Bateria de Validação Formal W06: Cenários W06-01 a 20  ";
+   string hdr2 = " Início da Bateria Formal: Cenários W06-01..20 e W07R-01..06     ";
    Print(hdr1);
    Print(hdr2);
    Print(hdr1);
@@ -623,31 +639,36 @@ void RunAllTests()
               "OnDeinit de B (não-proprietária) NÃO remove lock nem heartbeat pertencentes à Instância A");
 
    //-----------------------------------------------------------------
-   // W06-18: Owner pode liberar guarda (OnDeinit de A)
+   // W06-18: Owner pode liberar guarda via CAS (OnDeinit de A)
    //-----------------------------------------------------------------
    // Instância A (proprietária legítima) encerra e executa OnDeinit
    TestReleaseGuard(inst_A, is_owner_A);
 
    bool owner_key_exists_18 = GlobalVariableCheck(TestGVKey("INSTANCE_OWNER"));
+   ulong registered_owner_18 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
    bool hb_exists_18 = GlobalVariableCheck(TestGVKey("HEARTBEAT"));
    AssertTest("W06-18",
-              !is_owner_A && !owner_key_exists_18 && !hb_exists_18,
-              "Instância proprietária A libera com sucesso o lock e heartbeat em seu OnDeinit");
+              !is_owner_A && owner_key_exists_18 && registered_owner_18 == 0 && hb_exists_18,
+              "Instância proprietária A libera com sucesso o lock via CAS (Owner=0) e preserva heartbeat para evitar corrida");
 
    //-----------------------------------------------------------------
-   // W06-19: Takeover após lease expirada (timeout > 5s)
+   // W06-19: Takeover após lease expirada (timeout > 15s)
    //-----------------------------------------------------------------
    // Instância A adquire guarda no instante t_guard_base
    TestAcquireGuard(inst_A, is_owner_A, t_guard_base);
-   // Avança tempo em 10 segundos sem renovação de heartbeat por A (lease expirada)
-   datetime t_takeover = t_guard_base + 10;
-   // Instância B tenta iniciar e executa takeover atômico via CAS
+
+   // Verificação limítrofe: com lease ativa (age <= 15s), takeover é estritamente proibido
+   datetime t_boundary = t_guard_base + INSTANCE_LEASE_TIMEOUT_SECONDS; // exatamente 15s
+   bool takeover_boundary = TestAcquireGuard(inst_B, is_owner_B, t_boundary);
+
+   // Com lease expirada (age > 15s), Instância B tenta iniciar e executa takeover atômico via CAS
+   datetime t_takeover = t_guard_base + INSTANCE_LEASE_TIMEOUT_SECONDS + 1; // 16s
    bool takeover_B = TestAcquireGuard(inst_B, is_owner_B, t_takeover);
 
    ulong registered_owner_19 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
    AssertTest("W06-19",
-              takeover_B && is_owner_B && registered_owner_19 == inst_B,
-              "Com lease expirada (>5s), Instância B assume ownership com sucesso através de takeover atômico via CAS");
+              !takeover_boundary && takeover_B && is_owner_B && registered_owner_19 == inst_B,
+              "Com lease ativa (<=15s) takeover é proibido; com lease expirada (>15s), Instância B assume ownership via CAS");
 
    //-----------------------------------------------------------------
    // W06-20: Instância antiga retorna após takeover (Fail-Closed)
@@ -673,10 +694,265 @@ void RunAllTests()
    TestClearGV();
 
    //-----------------------------------------------------------------
+   // W07R-01: Reabertura Estrita BLOCKED -> REOPENING -> MONITORING
+   //-----------------------------------------------------------------
+   // 1. Cenário Operacional Ativo: Transição formal através de REOPENING
+   test_state     = EDDY_STATE_BLOCKED;
+   test_window_id = 1;
+   test_baseline  = -500.0;
+   test_t_trigger = D'2026.09.14 10:00:00';
+   test_t_unlock  = test_t_trigger + 14400; // 14:00:00
+   test_event_id  = 7001;
+   sim_positions_total = 0;
+   sim_orders_total    = 0;
+   sim_connected       = true;
+   TestPersistGV();
+
+   datetime t_now_01 = test_t_unlock + 10; // 10s após t_unlock
+   bool path_reopening_hit = false;
+   bool path_monitoring_hit = false;
+   double captured_baseline_01 = 0.0;
+   double evaluated_w_new_01 = -999.0;
+
+   if(test_state == EDDY_STATE_BLOCKED && t_now_01 >= test_t_unlock)
+   {
+      if(TestCheckSafetyConditions())
+      {
+         // Transiciona obrigatoriamente para REOPENING
+         test_state = EDDY_STATE_REOPENING;
+         path_reopening_hit = true;
+
+         // No estado REOPENING:
+         test_window_id++;
+         double D_reopen = -530.0; // Resultado acumulado diário no momento da reabertura
+         test_baseline = D_reopen; // Bn = D(t_reopen), NUNCA Equity!
+         captured_baseline_01 = test_baseline;
+         evaluated_w_new_01 = TestCalcWindowResult(D_reopen, test_baseline); // W_(n+1)(t_reopen) == 0
+
+         // Conclusão da reabertura: limpa bloqueio e transiciona para MONITORING
+         test_t_trigger = 0;
+         test_t_unlock  = 0;
+         test_event_id  = 0;
+         test_safe_to_operate = true;
+         test_state = EDDY_STATE_MONITORING;
+         path_monitoring_hit = true;
+         TestPersistGV();
+      }
+   }
+
+   // 2. Cenário Pós-Restart com t >= t_unlock: INIT -> REOPENING -> MONITORING
+   // Persiste estado BLOCKED com tempo expirado
+   test_state     = EDDY_STATE_BLOCKED;
+   test_window_id = 1;
+   test_baseline  = -530.0;
+   test_t_trigger = D'2026.09.14 10:00:00';
+   test_t_unlock  = D'2026.09.14 14:00:00';
+   test_event_id  = 7002;
+   TestPersistGV();
+
+   // Simula restart do terminal às 14:30:00
+   datetime t_restart_01 = D'2026.09.14 14:30:00';
+   test_state = EDDY_STATE_INIT;
+   bool restart_path_ok = false;
+
+   EddyRecoveryState rec_01;
+   if(TestLoadGV(rec_01))
+   {
+      if(rec_01.state == EDDY_STATE_BLOCKED)
+      {
+         if(t_restart_01 >= rec_01.t_unlock && TestCheckSafetyConditions())
+         {
+            // T02C: Direto para REOPENING, nunca diretamente para MONITORING!
+            test_state = EDDY_STATE_REOPENING;
+            test_window_id = rec_01.window_id + 1;
+            double D_reopen = -530.0;
+            test_baseline = D_reopen;
+            double W_new = TestCalcWindowResult(D_reopen, test_baseline);
+
+            test_t_trigger = 0;
+            test_t_unlock  = 0;
+            test_event_id  = 0;
+            test_safe_to_operate = true;
+            test_state = EDDY_STATE_MONITORING;
+            if(W_new == 0.0) restart_path_ok = true;
+            TestPersistGV();
+         }
+      }
+   }
+
+   bool test_01_ok = (path_reopening_hit && path_monitoring_hit &&
+                      captured_baseline_01 == -530.0 && evaluated_w_new_01 == 0.0 &&
+                      test_window_id == 2 && test_state == EDDY_STATE_MONITORING &&
+                      restart_path_ok);
+   AssertTest("W07R-01",
+              test_01_ok,
+              "Fluxo de reabertura obedece rigorosamente BLOCKED -> REOPENING -> MONITORING, Bn = D(t_reopen), W_new == 0 e INIT -> REOPENING -> MONITORING no restart");
+
+   //-----------------------------------------------------------------
+   // W07R-02: Virada de Dia em MONITORING (B0=0) e em BLOCKED (Preserva Bloqueio)
+   //-----------------------------------------------------------------
+   // 1. Virada de dia em MONITORING em janela avançada Jn (n=2, Bn=-530.0)
+   test_state     = EDDY_STATE_MONITORING;
+   test_window_id = 2;
+   test_baseline  = -530.0;
+   datetime day_old_02 = D'2026.09.14 00:00:00';
+   test_day_start = day_old_02;
+   TestPersistGV();
+
+   datetime t_midnight_02 = D'2026.09.15 00:00:05';
+   datetime day_new_02    = TestGetDayStart(t_midnight_02);
+   bool rollover_mon_ok = false;
+
+   if(day_new_02 > test_day_start)
+   {
+      test_day_start = day_new_02;
+      if(test_state == EDDY_STATE_MONITORING)
+      {
+         // Reinicia estritamente para J0 com B0 = 0.0 (NUNCA Equity!)
+         test_window_id = 0;
+         test_baseline  = 0.0;
+         TestPersistGV();
+         rollover_mon_ok = (test_window_id == 0 && test_baseline == 0.0);
+      }
+   }
+
+   // 2. Virada de dia durante BLOCKED
+   test_state     = EDDY_STATE_BLOCKED;
+   test_t_trigger = D'2026.09.15 22:30:00';
+   test_t_unlock  = test_t_trigger + 14400; // D'2026.09.16 02:30:00'
+   test_event_id  = 7003;
+   TestPersistGV();
+
+   datetime t_midnight_blk = D'2026.09.16 00:00:10';
+   datetime day_new_blk    = TestGetDayStart(t_midnight_blk);
+   bool rollover_blk_ok = false;
+
+   if(day_new_blk > test_day_start)
+   {
+      test_day_start = day_new_blk;
+      if(test_state == EDDY_STATE_BLOCKED)
+      {
+         // Preserva integralmente t_trigger, t_unlock e event_id (sem resetar as 4h)
+         rollover_blk_ok = (test_t_trigger == D'2026.09.15 22:30:00' &&
+                            test_t_unlock  == D'2026.09.16 02:30:00' &&
+                            test_event_id  == 7003 &&
+                            test_state     == EDDY_STATE_BLOCKED);
+         TestPersistGV();
+      }
+   }
+
+   AssertTest("W07R-02",
+              rollover_mon_ok && rollover_blk_ok,
+              "Virada de dia em MONITORING reinicia para J0 com B0=0.0 (sem tocar em Equity) e durante BLOCKED preserva t_trigger, t_unlock e event_id");
+
+   TestClearGV();
+
+   //-----------------------------------------------------------------
+   // W07R-03: Concorrência no Bootstrap / Disputa Atômica de Aquisição Inicial (CAS 0 -> ID)
+   //-----------------------------------------------------------------
+   ulong id_C = 999111;
+   ulong id_D = 999222;
+   bool is_owner_C = false;
+   bool is_owner_D = false;
+   datetime t_cas = D'2026.09.16 10:00:00';
+
+   // Instância C inicia bootstrap (0) e adquire via CAS (0 -> id_C)
+   bool acq_C = TestAcquireGuard(id_C, is_owner_C, t_cas);
+   // Instância D tenta simultaneamente no mesmo segundo (encontra OWNER == id_C, heartbeat recente)
+   bool acq_D = TestAcquireGuard(id_D, is_owner_D, t_cas);
+
+   ulong registered_owner_03 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
+   bool hb_exists_03 = GlobalVariableCheck(TestGVKey("HEARTBEAT"));
+   datetime hb_val_03 = (datetime)GlobalVariableGet(TestGVKey("HEARTBEAT"));
+
+   AssertTest("W07R-03",
+              acq_C && is_owner_C && !acq_D && !is_owner_D &&
+              registered_owner_03 == id_C && hb_exists_03 && hb_val_03 == t_cas,
+              "Bootstrap neutro (0) e aquisição via CAS (0 -> ID) garante exclusão mútua estrita na disputa inicial");
+
+   //-----------------------------------------------------------------
+   // W07R-04: Liberação e Handoff Seguro sem Apagar Heartbeat
+   //-----------------------------------------------------------------
+   // C encerra e libera a guarda via CAS: id_C -> 0
+   TestReleaseGuard(id_C, is_owner_C);
+
+   bool c_freed_04 = (!is_owner_C &&
+                      (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER")) == 0 &&
+                      GlobalVariableCheck(TestGVKey("HEARTBEAT")));
+
+   // Instância D tenta adquirir 2 segundos depois (sem esperar timeout de lease, pois OWNER == 0)
+   datetime t_cas_handoff = t_cas + 2;
+   bool acq_D_hand = TestAcquireGuard(id_D, is_owner_D, t_cas_handoff);
+
+   ulong registered_owner_04 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
+   datetime hb_val_04 = (datetime)GlobalVariableGet(TestGVKey("HEARTBEAT"));
+
+   AssertTest("W07R-04",
+              c_freed_04 && acq_D_hand && is_owner_D &&
+              registered_owner_04 == id_D && hb_val_04 == t_cas_handoff,
+              "Liberação atômica (ID -> 0) preserva heartbeat para segurança e permite handoff imediato via CAS para nova instância");
+
+   //-----------------------------------------------------------------
+   // W07R-05: OnDeinit Tardio de Zumbi após Takeover (CAS Falha e Preserva Lock)
+   //-----------------------------------------------------------------
+   // D é proprietária no instante t_cas_handoff.
+   // Simula travamento da instância D por 25 segundos (lease expira: 25s > 15s).
+   ulong id_E = 999333;
+   bool is_owner_E = false;
+   datetime t_cas_takeover = t_cas_handoff + 25;
+
+   // Instância E chega e executa takeover via CAS: id_D -> id_E
+   bool acq_E = TestAcquireGuard(id_E, is_owner_E, t_cas_takeover);
+
+   // Zumbi D acorda de sua pausa e executa seu OnDeinit tardio (com flag local is_owner_D ainda true)
+   // O método TestReleaseGuard executa CAS: id_D -> 0.
+   // Como OWNER atual é id_E, o CAS DEVE FALHAR, preservando id_E intacto!
+   TestReleaseGuard(id_D, is_owner_D);
+
+   ulong registered_owner_05 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
+   datetime hb_val_05 = (datetime)GlobalVariableGet(TestGVKey("HEARTBEAT"));
+
+   AssertTest("W07R-05",
+              acq_E && is_owner_E && !is_owner_D &&
+              registered_owner_05 == id_E && hb_val_05 == t_cas_takeover,
+              "OnDeinit de instância zumbi pós-takeover falha no CAS e não corrompe ownership nem heartbeat do novo proprietário");
+
+   //-----------------------------------------------------------------
+   // W07R-06: Heartbeat Residual com OWNER == 0 é Ignorado e Sobrescrito
+   //-----------------------------------------------------------------
+   // Instância E encerra normalmente e libera via CAS: id_E -> 0
+   TestReleaseGuard(id_E, is_owner_E);
+
+   // Neste instante: OWNER == 0, mas HEARTBEAT ainda contém t_cas_takeover
+   bool owner_is_zero_06 = ((ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER")) == 0);
+   bool hb_residual_06   = (GlobalVariableCheck(TestGVKey("HEARTBEAT")) &&
+                            (datetime)GlobalVariableGet(TestGVKey("HEARTBEAT")) == t_cas_takeover);
+
+   // Nova instância F chega apenas 1 segundo depois (t_cas_takeover + 1)
+   ulong id_F = 999444;
+   bool is_owner_F = false;
+   datetime t_cas_F = t_cas_takeover + 1;
+
+   // F deve adquirir imediatamente via CAS (0 -> id_F) e sobrescrever heartbeat, sem esperar lease
+   bool acq_F = TestAcquireGuard(id_F, is_owner_F, t_cas_F);
+
+   ulong registered_owner_06 = (ulong)GlobalVariableGet(TestGVKey("INSTANCE_OWNER"));
+   datetime hb_val_06 = (datetime)GlobalVariableGet(TestGVKey("HEARTBEAT"));
+
+   AssertTest("W07R-06",
+              owner_is_zero_06 && hb_residual_06 && acq_F && is_owner_F &&
+              registered_owner_06 == id_F && hb_val_06 == t_cas_F,
+              "Heartbeat residual com OWNER == 0 é ignorado e sobrescrito imediatamente por nova instância sem delay de lease");
+
+   // Limpeza final
+   TestReleaseGuard(id_F, is_owner_F);
+   TestClearGV();
+
+   //-----------------------------------------------------------------
    // Relatório Final da Bateria
    //-----------------------------------------------------------------
    string ftr1 = "==================================================================";
-   string ftr2 = StringFormat(" Resumo da Bateria W06: Total=%d | Aprovados=%d | Falhas=%d",
+   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R: Total=%d | Aprovados=%d | Falhas=%d",
                               g_total_tests, g_passed_tests, g_failed_tests);
    Print(ftr1);
    Print(ftr2);

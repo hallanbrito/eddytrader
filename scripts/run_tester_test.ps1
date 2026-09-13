@@ -2,6 +2,9 @@ $terminal = "C:\Program Files\MetaTrader 5\terminal64.exe"
 $termData = "C:\Users\dmnde\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075"
 $iniPath = "$termData\run_tester.ini"
 
+Copy-Item "C:\Projetos\eddytrader\tests\test_fsm_w06.ex5" "$termData\MQL5\Experts\test_fsm_w06.ex5" -Force
+Copy-Item "C:\Projetos\eddytrader\src\EddyTrader.ex5" "$termData\MQL5\Experts\EddyTrader.ex5" -Force
+
 $iniContent = @"
 [Common]
 Login=6272676

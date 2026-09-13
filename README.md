@@ -10,10 +10,10 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W06 — Primeiro Expert Advisor Mínimo do EddyTrader`
-* **Status:** Concluída. Expert Advisor funcional e defensivo implementado no arquivo de produção [`src/EddyTrader.mq5`](file:///C:/Projetos/eddytrader/src/EddyTrader.mq5), compilando com 100% de sucesso (0 erros, 0 warnings) no MetaEditor 64 (build 6193). Máquina de estados finita (FSM) em 6 estados, modelo contábil de janelas operacionais com baselines, liquidação universal desacoplada por ticket, neutralização reativa via `OnTradeTransaction`, guarda robusta de instância única (`OWNER + HEARTBEAT` com CAS atômico e postura fail-closed) e persistência em Terminal Global Variables implementadas e validadas. Bateria formal com 20 cenários de teste automatizados (W06-01 a W06-20) executada no ambiente real do MT5 Desktop com 100% de aprovação (20/20 PASS), além de teste de execução no Strategy Tester (5.689 ticks processados com estabilidade total).
-* **Próxima Fase:** `W07 — Testes Integrados e Homologação Operacional`.
-* **Documentação da Entrega:** Detalhada formalmente em [13 — Implementação do MVP (W06)](file:///C:/Projetos/eddytrader/docs/13-IMPLEMENTACAO-MVP-W06.md).
+* **Fase:** `W07 — Testes Integrados e Homologação Operacional em Conta Demo`
+* **Status:** Homologado com Ressalvas (36/36 asserções aprovadas nos 15 cenários DEMO-01 a DEMO-15). As garantias de concorrência, retcodes de erro remoto (`retcode=10018`), persistência, recuperação de baseline $B_n = D(t_{\text{reopen}})$ via `REOPENING` e postura fail-closed foram homologadas em sessão com conta Demo conectada ao vivo (`ActivTradesCorp-Server`, login `6272676`, build 6193). A neutralização reativa via `OnTradeTransaction` foi validada no Strategy Tester com dados do broker (latência computacional interna de 20 $\mu$s e 36 $\mu$s), permanecendo catalogada a validação empírica ponta a ponta com pregão aberto no teste formal `LIVE-01`. Bateria unificada de regressão formal (`test_fsm_w06.mq5` com cenários W06-01 a 20 e W07R-01/02) 100% verde (22/22 PASS).
+* **Próxima Fase:** `W08 — Hardening, Observabilidade e Painel de Monitoramento (Sem Estratégia de Trading)`.
+* **Documentação da Entrega:** Detalhada formalmente em [14 — Homologação Operacional em Conta Demo (W07)](file:///C:/Projetos/eddytrader/docs/14-HOMOLOGACAO-W07.md).
 
 ---
 
