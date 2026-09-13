@@ -716,6 +716,7 @@ void UI_SetRect(const string name, int x, int y, int w, int h, color bg_clr, col
       ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
@@ -735,6 +736,7 @@ void UI_SetLabel(const string name, int x, int y, const string text, color clr, 
       ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
@@ -746,13 +748,14 @@ void UI_SetLabel(const string name, int x, int y, const string text, color clr, 
    ObjectSetString(0, name, OBJPROP_FONT, bold ? "Arial Bold" : "Segoe UI");
 }
 
-void UI_SetButton(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 8)
+void UI_SetButton(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 8, bool bold = false)
 {
    if(ObjectFind(0, name) < 0)
    {
       ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
@@ -764,26 +767,28 @@ void UI_SetButton(const string name, int x, int y, int w, int h, const string te
    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
    ObjectSetInteger(0, name, OBJPROP_COLOR, text_clr);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
-   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI");
+   ObjectSetString(0, name, OBJPROP_FONT, bold ? "Arial Bold" : "Segoe UI");
    ObjectSetInteger(0, name, OBJPROP_STATE, false);
 }
 
-void UI_SetEdit(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 9)
+void UI_SetEdit(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 10)
 {
-   if(ObjectFind(0, name) < 0)
+   bool is_new = (ObjectFind(0, name) < 0);
+   if(is_new)
    {
       ObjectCreate(0, name, OBJ_EDIT, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false); // NUNCA selectable para permitir foco direto de digitação
+      ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_READONLY, false);
       ObjectSetInteger(0, name, OBJPROP_ALIGN, ALIGN_CENTER);
+      ObjectSetString(0, name, OBJPROP_TEXT, text); // Seta texto inicial APENAS na criação
    }
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
-   ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
    ObjectSetInteger(0, name, OBJPROP_COLOR, text_clr);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
@@ -796,126 +801,216 @@ void UI_DeleteAll()
    ChartRedraw(0);
 }
 
-void UI_DeleteModal()
+void UI_DeleteDialog()
 {
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Bg");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Title");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Cur");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Lbl");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Input");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Err");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Save");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Cancel");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Confirm");
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX + "Dlg_");
+   ChartRedraw(0);
+}
+
+void UI_DeleteHUD()
+{
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX + "Hud_");
    ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| Renderizadores dos Modos Visuais de Interface                    |
+//| Janela Separada de Configuração de Limite de Perda               |
 //+------------------------------------------------------------------+
-void RenderConfigDialog()
+void GetDialogPosition(int &dlg_x, int &dlg_y)
 {
-   string curr = AccountInfoString(ACCOUNT_CURRENCY);
+   // Dimensões do HUD: W = 260, H = 165
+   // Dimensões do Diálogo: W = 280, H = 205
+   long chart_h = ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
+   int needed_h = InpHudOffsetY + 165 + 215 + 20;
 
-   if(g_config_ui_state == UI_STATE_EDITING)
+   // Se houver espaço vertical suficiente, posiciona abaixo do HUD
+   if(chart_h <= 0 || chart_h >= needed_h)
    {
-      UI_SetRect(EDDY_UI_PREFIX + "Modal_Bg", 0, 0, 260, 180, C'20,24,35', C'0,150,214');
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Title", 14, 12, "ALTERAR LIMITE DE PERDA", clrWhite, 9, true);
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Cur", 14, 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'180,190,200', 8);
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Lbl", 14, 58, "Novo Limite (ex: 750.00):", clrWhite, 8);
-
-      string input_obj = EDDY_UI_PREFIX + "Modal_Input";
-      if(ObjectFind(0, input_obj) < 0)
-      {
-         UI_SetEdit(input_obj, 14, 78, 232, 24, DoubleToString(g_max_loss, 2), C'30,35,48', clrWhite, 9);
-      }
-
-      string err_txt = (g_config_error_msg != "") ? g_config_error_msg : "Digite o novo valor desejado";
-      color err_clr  = (g_config_error_msg != "") ? C'240,80,80' : C'140,150,165';
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Err", 14, 108, err_txt, err_clr, 8);
-
-      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Save", 14, 138, 110, 26, "AVANCAR", C'0,122,204', clrWhite, 8);
-      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Cancel", 136, 138, 110, 26, "CANCELAR", C'60,65,75', clrWhite, 8);
-      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Confirm");
+      dlg_x = 0;           // Relativo a InpHudOffsetX
+      dlg_y = 175;         // Relativo a InpHudOffsetY (logo abaixo do HUD)
    }
-   else if(g_config_ui_state == UI_STATE_CONFIRMING)
+   else
    {
-      UI_SetRect(EDDY_UI_PREFIX + "Modal_Bg", 0, 0, 260, 180, C'20,24,35', C'243,156,18');
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Title", 14, 12, "CONFIRMAR ALTERACAO", clrGold, 9, true);
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Cur", 14, 38, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'180,190,200', 8);
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Lbl", 14, 62, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
-      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Err", 14, 95, "Deseja aplicar o novo limite?", C'220,220,220', 8);
-
-      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Input");
-      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Save");
-      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Confirm", 14, 138, 110, 26, "SIM, APLICAR", C'39,174,96', clrWhite, 8);
-      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Cancel", 136, 138, 110, 26, "CANCELAR", C'60,65,75', clrWhite, 8);
+      // Em janelas verticalmente compactas, posiciona ao lado do HUD
+      dlg_x = 270;         // Relativo a InpHudOffsetX (à direita do HUD)
+      dlg_y = 0;           // Relativo a InpHudOffsetY
    }
-   ChartRedraw(0);
 }
 
-void RenderCompactHUD()
+void UI_OpenConfigDialog()
 {
-   Comment(""); // Mantém área de comentário limpa no modo compacto
-
-   if(g_config_ui_state != UI_STATE_IDLE)
+   if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate || !g_is_owner)
    {
-      RenderConfigDialog();
+      Print("[EddyTrader][WARN] Configuração indisponível fora de MONITORING seguro.");
       return;
    }
 
-   // Limpa qualquer modal residual
-   UI_DeleteModal();
+   UI_DeleteDialog(); // Limpeza preventiva de qualquer resíduo
+   g_config_ui_state  = UI_STATE_EDITING;
+   g_config_error_msg = "";
+   g_pending_max_loss = 0.0;
+
+   int dx = 0, dy = 0;
+   GetDialogPosition(dx, dy);
+   string curr = AccountInfoString(ACCOUNT_CURRENCY);
+
+   // Painel de Configuração (W=280, H=205)
+   UI_SetRect(EDDY_UI_PREFIX + "Dlg_Bg", dx, dy, 280, 205, C'18,22,30', C'0,150,214');
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Title", dx + 14, dy + 12, "CONFIGURAR LIMITE DE PERDA", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurLimit", dx + 14, dy + 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'170,180,195', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Input_Lbl", dx + 14, dy + 58, StringFormat("Novo Limite (%s):", curr), clrWhite, 8, true);
+
+   // Campo de Edição: Largo, alto, confortável, texto inicial g_max_loss
+   string init_txt = DoubleToString(g_max_loss, 2);
+   UI_SetEdit(EDDY_UI_PREFIX + "Dlg_Input", dx + 14, dy + 78, 252, 26, init_txt, C'28,34,48', clrWhite, 10);
+
+   // Mensagem de Orientação / Erro
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 112, "Digite o valor (ex: 750,00 ou 1000)", C'130,140,155', 8);
+
+   // Botões: CANCELAR e AVANÇAR
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Cancel", dx + 14, dy + 150, 120, 28, "CANCELAR", C'50,56,68', clrWhite, 8);
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Next", dx + 146, dy + 150, 120, 28, "AVANCAR", C'0,122,204', clrWhite, 8, true);
+
+   ChartRedraw(0);
+}
+
+void UI_ShowConfirmDialog()
+{
+   int dx = 0, dy = 0;
+   GetDialogPosition(dx, dy);
+   string curr = AccountInfoString(ACCOUNT_CURRENCY);
 
    datetime t_now = GetServerTimeSafe();
    double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
    double F       = CalculateFloatingResult();
    double D       = R_day + F;
-   double W       = CalculateWindowResult(D, g_baseline);
+
+   g_config_ui_state = UI_STATE_CONFIRMING;
+
+   // Remove elementos de edição
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_Input_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_Input");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_Btn_Next");
+
+   // Atualiza Painel para Confirmação
+   UI_SetRect(EDDY_UI_PREFIX + "Dlg_Bg", dx, dy, 280, 205, C'18,22,30', C'243,156,18');
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Title", dx + 14, dy + 12, "CONFIRMAR NOVO LIMITE", clrGold, 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurLimit", dx + 14, dy + 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'170,180,195', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_NewLimit", dx + 14, dy + 58, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
+
+   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado Atual: %+.2f %s", D, curr), res_clr, 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 108, "Aviso: Novo limite tem aplicacao imediata!", C'243,156,18', 8);
+
+   // Botões: VOLTAR e CONFIRMAR
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Back", dx + 14, dy + 150, 120, 28, "VOLTAR", C'50,56,68', clrWhite, 8);
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Confirm", dx + 146, dy + 150, 120, 28, "CONFIRMAR", C'39,174,96', clrWhite, 8, true);
+
+   ChartRedraw(0);
+}
+
+void UI_BackToEditing()
+{
+   int dx = 0, dy = 0;
+   GetDialogPosition(dx, dy);
+   string curr = AccountInfoString(ACCOUNT_CURRENCY);
+
+   g_config_ui_state = UI_STATE_EDITING;
+
+   // Remove elementos de confirmação
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_NewLimit");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_CurResult");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_Btn_Back");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Dlg_Btn_Confirm");
+
+   // Restaura tela de edição
+   UI_SetRect(EDDY_UI_PREFIX + "Dlg_Bg", dx, dy, 280, 205, C'18,22,30', C'0,150,214');
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Title", dx + 14, dy + 12, "CONFIGURAR LIMITE DE PERDA", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurLimit", dx + 14, dy + 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'170,180,195', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Input_Lbl", dx + 14, dy + 58, StringFormat("Novo Limite (%s):", curr), clrWhite, 8, true);
+
+   string txt = (g_pending_max_loss > 0) ? DoubleToString(g_pending_max_loss, 2) : DoubleToString(g_max_loss, 2);
+   UI_SetEdit(EDDY_UI_PREFIX + "Dlg_Input", dx + 14, dy + 78, 252, 26, txt, C'28,34,48', clrWhite, 10);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Dlg_Input", OBJPROP_TEXT, txt);
+
+   string err_txt = (g_config_error_msg != "") ? g_config_error_msg : "Digite o valor (ex: 750,00 ou 1000)";
+   color err_clr  = (g_config_error_msg != "") ? C'240,80,80' : C'130,140,155';
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 112, err_txt, err_clr, 8);
+
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Cancel", dx + 14, dy + 150, 120, 28, "CANCELAR", C'50,56,68', clrWhite, 8);
+   UI_SetButton(EDDY_UI_PREFIX + "Dlg_Btn_Next", dx + 146, dy + 150, 120, 28, "AVANCAR", C'0,122,204', clrWhite, 8, true);
+
+   ChartRedraw(0);
+}
+
+void UI_CloseConfigDialog()
+{
+   g_config_ui_state  = UI_STATE_IDLE;
+   g_pending_max_loss = 0.0;
+   g_config_error_msg = "";
+   UI_DeleteDialog();
+}
+
+//+------------------------------------------------------------------+
+//| Renderizadores dos Modos Visuais de Interface                    |
+//+------------------------------------------------------------------+
+void RenderCompactHUD()
+{
+   Comment(""); // Mantém área de comentário limpa no modo compacto
+
+   // Se o estado mudou para não-MONITORING enquanto o diálogo estava aberto, fecha o diálogo por segurança
+   if(g_config_ui_state != UI_STATE_IDLE)
+   {
+      if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate || !g_is_owner)
+      {
+         UI_CloseConfigDialog();
+      }
+   }
+
+   datetime t_now = GetServerTimeSafe();
+   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
+   double F       = CalculateFloatingResult();
+   double D       = R_day + F;
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
 
-   // Cartão base
-   UI_SetRect(EDDY_UI_PREFIX + "CardBg", 0, 0, 260, 180, C'24,28,37', C'45,55,72');
-   UI_SetLabel(EDDY_UI_PREFIX + "Title", 14, 12, "EDDYTRADER", C'0,180,216', 9, true);
-   UI_SetLabel(EDDY_UI_PREFIX + "Mode", 175, 13, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'140,150,165', 7);
+   // 1. Cartão Base do HUD (W=260, H=165)
+   UI_SetRect(EDDY_UI_PREFIX + "Hud_CardBg", 0, 0, 260, 165, C'20,24,33', C'40,48,65');
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Title", 12, 10, "EDDYTRADER", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Ver", 168, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
 
-   // Linha de Status
-   UI_SetLabel(EDDY_UI_PREFIX + "Status_Lbl", 14, 36, "Status:", C'160,170,185', 8);
+   // 2. Status Humano
    string status_str = GetHumanStateName(g_current_state);
-   color status_clr  = clrWhite;
+   color  status_clr = clrWhite;
    switch(g_current_state)
    {
-      case EDDY_STATE_MONITORING:           status_clr = C'46,204,113'; break; // Verde esmeralda
-      case EDDY_STATE_PROTECTION_TRIGGERED:
-      case EDDY_STATE_LIQUIDATING:          status_clr = C'231,76,60';  break; // Vermelho
-      case EDDY_STATE_BLOCKED:              status_clr = C'243,156,18'; break; // Laranja âmbar
-      default:                              status_clr = clrGold;       break;
+      case EDDY_STATE_MONITORING:           status_str = "MONITORANDO";        status_clr = C'46,204,113'; break;
+      case EDDY_STATE_PROTECTION_TRIGGERED: status_str = "PROTECAO ACIONADA";  status_clr = C'231,76,60';  break;
+      case EDDY_STATE_LIQUIDATING:          status_str = "FECHANDO OPERACOES"; status_clr = C'231,76,60';  break;
+      case EDDY_STATE_BLOCKED:              status_str = "PROTECAO ATIVA";     status_clr = C'243,156,18'; break;
+      case EDDY_STATE_REOPENING:            status_str = "REABRINDO";          status_clr = clrGold;       break;
+      default:                              status_str = "INICIANDO";          status_clr = clrGold;       break;
    }
    if(!g_is_owner || !g_safe_to_operate)
    {
       status_str = "FAIL-CLOSED";
       status_clr = clrRed;
    }
-   UI_SetLabel(EDDY_UI_PREFIX + "Status_Val", 85, 35, status_str, status_clr, 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Status_Lbl", 12, 32, "Status:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Status_Val", 80, 31, status_str, status_clr, 9, true);
 
-   // Linha de Limite de Perda
-   UI_SetLabel(EDDY_UI_PREFIX + "Limit_Lbl", 14, 58, "Limite Perda:", C'160,170,185', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Limit_Val", 100, 58, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
+   // 3. Resultado Atual
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Lbl", 12, 52, "Resultado:", C'150,160,175', 8);
+   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, StringFormat("%+.2f %s", D, curr), res_clr, 8, true);
 
-   // Linha de Resultado da Janela (W)
-   UI_SetLabel(EDDY_UI_PREFIX + "Win_Lbl", 14, 78, "Perda Janela:", C'160,170,185', 8);
-   color w_clr = (W >= 0) ? C'46,204,113' : ((W <= -g_max_loss * 0.7) ? C'231,76,60' : C'243,156,18');
-   UI_SetLabel(EDDY_UI_PREFIX + "Win_Val", 100, 78, StringFormat("%+.2f %s", W, curr), w_clr, 8, true);
+   // 4. Limite Atual
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Limit_Lbl", 12, 72, "Limite Atual:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Limit_Val", 80, 72, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
 
-   // Linha de Resultado Consolidado do Dia (D)
-   UI_SetLabel(EDDY_UI_PREFIX + "Day_Lbl", 14, 98, "Total do Dia:", C'160,170,185', 8);
-   color d_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Day_Val", 100, 98, StringFormat("%+.2f %s", D, curr), d_clr, 8, true);
-
-   // Linha de Mensagem / Bloqueio / Feedback
-   string sub_msg = "";
-   color  sub_clr = C'120,130,145';
+   // 5. Proteção / Bloqueio
+   string prot_str = "Vigilante";
+   color  prot_clr = C'46,204,113';
    if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
    {
       long rem_sec = (long)(g_t_unlock - t_now);
@@ -923,53 +1018,56 @@ void RenderCompactHUD()
       int h = (int)(rem_sec / 3600);
       int m = (int)((rem_sec % 3600) / 60);
       int s = (int)(rem_sec % 60);
-      sub_msg = StringFormat("Bloqueio restante: %02d:%02d:%02d", h, m, s);
-      sub_clr = C'243,156,18';
+      prot_str = StringFormat("Bloqueio: %02d:%02d:%02d", h, m, s);
+      prot_clr = C'243,156,18';
    }
    else if(g_config_feedback_msg != "" && t_now <= g_config_feedback_expiry)
    {
-      sub_msg = g_config_feedback_msg;
-      sub_clr = C'46,204,113';
+      prot_str = g_config_feedback_msg;
+      prot_clr = C'46,204,113';
    }
-   else
-   {
-      sub_msg = StringFormat("Janela J%d | Baseline: %.2f", g_window_id, g_baseline);
-      sub_clr = C'120,130,145';
-   }
-   UI_SetLabel(EDDY_UI_PREFIX + "Msg", 14, 118, sub_msg, sub_clr, 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Prot_Lbl", 12, 92, "Protecao:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Prot_Val", 80, 92, prot_str, prot_clr, 8, true);
 
-   // Botões Interativos
+   // 6. Posições e Ordens
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Ops_Lbl", 12, 112, "Operacoes:", C'150,160,175', 8);
+   string ops_str = StringFormat("%d pos / %d ord", PositionsTotal(), OrdersTotal());
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Ops_Val", 80, 112, ops_str, C'180,190,205', 8);
+
+   // 7. Botões
    bool can_configure = (g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner);
    if(can_configure)
    {
-      UI_SetButton(EDDY_UI_PREFIX + "Btn_Config", 14, 142, 140, 24, "CONFIGURAR LIMITE", C'0,122,204', clrWhite, 8);
+      string cfg_btn_txt = (g_config_ui_state != UI_STATE_IDLE) ? "CONFIGURANDO..." : "CONFIGURAR";
+      color  cfg_btn_bg  = (g_config_ui_state != UI_STATE_IDLE) ? C'0,90,160' : C'0,122,204';
+      UI_SetButton(EDDY_UI_PREFIX + "Hud_Btn_Config", 12, 134, 140, 22, cfg_btn_txt, cfg_btn_bg, clrWhite, 8);
    }
    else
    {
-      UI_SetButton(EDDY_UI_PREFIX + "Btn_Config", 14, 142, 140, 24, "LIMITE BLOQUEADO", C'50,55,65', C'120,125,135', 8);
+      UI_SetButton(EDDY_UI_PREFIX + "Hud_Btn_Config", 12, 134, 140, 22, "BLOQUEADO", C'40,45,55', C'110,115,125', 8);
    }
-   UI_SetButton(EDDY_UI_PREFIX + "Btn_Mode", 160, 142, 86, 24, "DETALHES", C'45,55,72', clrWhite, 8);
+   UI_SetButton(EDDY_UI_PREFIX + "Hud_Btn_Details", 158, 134, 90, 22, "DETALHES", C'45,52,65', clrWhite, 8);
 
-   ChartRedraw(0);
+   // Se o diálogo de confirmação estiver aberto, atualizamos apenas o resultado atual nele
+   if(g_config_ui_state == UI_STATE_CONFIRMING)
+   {
+      int dx = 0, dy = 0;
+      GetDialogPosition(dx, dy);
+      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado Atual: %+.2f %s", D, curr), res_clr, 8);
+   }
+
+   // NOTA: Enquanto em UI_STATE_EDITING, NÃO tocamos em Dlg_Input nem chamamos ChartRedraw(0) repetidamente a cada timer!
+   if(g_config_ui_state == UI_STATE_IDLE)
+   {
+      ChartRedraw(0);
+   }
 }
 
 void RenderDetailedHUD()
 {
-   // Limpa objetos do painel compacto e modais
-   UI_DeleteModal();
-   ObjectDelete(0, EDDY_UI_PREFIX + "CardBg");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Title");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Mode");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Status_Lbl");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Status_Val");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Limit_Lbl");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Limit_Val");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Win_Lbl");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Win_Val");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Day_Lbl");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Day_Val");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Msg");
-   ObjectDelete(0, EDDY_UI_PREFIX + "Btn_Config");
+   // Fecha diálogo e limpa HUD compacto
+   UI_CloseConfigDialog();
+   UI_DeleteHUD();
 
    // Botão para retornar ao compacto
    UI_SetButton(EDDY_UI_PREFIX + "Btn_Mode", 10, 10, 160, 24, "[ PAINEL COMPACTO ]", C'0,122,204', clrWhite, 8);
@@ -1057,6 +1155,7 @@ void RenderDetailedHUD()
 
 void RenderOffHUD()
 {
+   UI_CloseConfigDialog();
    UI_DeleteAll();
 
    // OFF + fail-closed / erro operacional crítico -> aviso textual mínimo de segurança
@@ -1599,27 +1698,59 @@ void OnChartEvent(const int id,
                   const double &dparam,
                   const string &sparam)
 {
+   // 1. Suporte a pressionamento de ENTER no campo de edição (CHARTEVENT_OBJECT_ENDEDIT)
+   if(id == CHARTEVENT_OBJECT_ENDEDIT && sparam == EDDY_UI_PREFIX + "Dlg_Input")
+   {
+      if(g_config_ui_state == UI_STATE_EDITING)
+      {
+         string txt = ObjectGetString(0, sparam, OBJPROP_TEXT);
+         double val = 0.0;
+         if(!ParseMoneyInput(txt, val) || val <= 0.0)
+         {
+            g_config_error_msg = "Valor invalido! Digite valor > 0.";
+            int dx = 0, dy = 0;
+            GetDialogPosition(dx, dy);
+            UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 112, g_config_error_msg, C'240,80,80', 8);
+            ChartRedraw(0);
+         }
+         else
+         {
+            g_pending_max_loss = val;
+            g_config_error_msg = "";
+            UI_ShowConfirmDialog();
+         }
+      }
+      return;
+   }
+
+   // 2. Cliques em botões interativos
    if(id == CHARTEVENT_OBJECT_CLICK)
    {
-      if(sparam == EDDY_UI_PREFIX + "Btn_Config")
+      // Botão CONFIGURAR no HUD
+      if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Config" || sparam == EDDY_UI_PREFIX + "Btn_Config")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
          if(g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner)
          {
-            g_config_ui_state = UI_STATE_EDITING;
-            g_config_error_msg = "";
-            UpdateHUD();
+            if(g_config_ui_state == UI_STATE_IDLE)
+               UI_OpenConfigDialog();
+            else
+               UI_CloseConfigDialog();
          }
          else
          {
-            Print("[EddyTrader][WARN] Configuração de limite indisponível fora de MONITORING.");
+            Print("[EddyTrader][WARN] Configuração de limite indisponível fora de MONITORING seguro.");
          }
+         return;
       }
-      else if(sparam == EDDY_UI_PREFIX + "Btn_Mode")
+
+      // Botão DETALHES no HUD ou retorno no Detalhado
+      if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Details" || sparam == EDDY_UI_PREFIX + "Btn_Mode")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
          if(g_hud_mode == EDDY_HUD_COMPACT)
          {
+            UI_CloseConfigDialog();
             g_hud_mode = EDDY_HUD_DETAILED;
          }
          else
@@ -1629,55 +1760,72 @@ void OnChartEvent(const int id,
          }
          UI_DeleteAll();
          UpdateHUD();
+         return;
       }
-      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Save")
+
+      // Botão AVANÇAR na janela de edição
+      if(sparam == EDDY_UI_PREFIX + "Dlg_Btn_Next" || sparam == EDDY_UI_PREFIX + "Modal_Btn_Save")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         string input_obj = EDDY_UI_PREFIX + "Modal_Input";
+         string input_obj = EDDY_UI_PREFIX + "Dlg_Input";
          string txt = ObjectGetString(0, input_obj, OBJPROP_TEXT);
          double val = 0.0;
          if(!ParseMoneyInput(txt, val) || val <= 0.0)
          {
-            g_config_error_msg = "Valor inválido! Digite valor > 0.";
-            UpdateHUD();
+            g_config_error_msg = "Valor invalido! Digite valor > 0.";
+            int dx = 0, dy = 0;
+            GetDialogPosition(dx, dy);
+            UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 112, g_config_error_msg, C'240,80,80', 8);
+            ChartRedraw(0);
          }
          else
          {
             g_pending_max_loss = val;
-            g_config_ui_state  = UI_STATE_CONFIRMING;
             g_config_error_msg = "";
-            UpdateHUD();
+            UI_ShowConfirmDialog();
          }
+         return;
       }
-      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Confirm")
+
+      // Botão CANCELAR na janela de edição
+      if(sparam == EDDY_UI_PREFIX + "Dlg_Btn_Cancel" || sparam == EDDY_UI_PREFIX + "Modal_Btn_Cancel")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         UI_CloseConfigDialog();
+         UpdateHUD();
+         return;
+      }
+
+      // Botão VOLTAR na janela de confirmação
+      if(sparam == EDDY_UI_PREFIX + "Dlg_Btn_Back")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         UI_BackToEditing();
+         return;
+      }
+
+      // Botão CONFIRMAR na janela de confirmação
+      if(sparam == EDDY_UI_PREFIX + "Dlg_Btn_Confirm" || sparam == EDDY_UI_PREFIX + "Modal_Btn_Confirm")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
          string err = "";
          if(SetMaxLossConfig(g_pending_max_loss, err))
          {
-            g_config_ui_state = UI_STATE_IDLE;
+            UI_CloseConfigDialog();
             g_config_feedback_msg = StringFormat("Limite atualizado para %.2f!", g_max_loss);
             g_config_feedback_expiry = GetServerTimeSafe() + 5;
-            g_pending_max_loss = 0.0;
-            g_config_error_msg = "";
-            UI_DeleteModal();
             UpdateHUD();
          }
          else
          {
-            g_config_ui_state = UI_STATE_EDITING;
+            UI_BackToEditing();
             g_config_error_msg = err;
-            UpdateHUD();
+            int dx = 0, dy = 0;
+            GetDialogPosition(dx, dy);
+            UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 112, g_config_error_msg, C'240,80,80', 8);
+            ChartRedraw(0);
          }
-      }
-      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Cancel")
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         g_config_ui_state = UI_STATE_IDLE;
-         g_pending_max_loss = 0.0;
-         g_config_error_msg = "";
-         UI_DeleteModal();
-         UpdateHUD();
+         return;
       }
    }
 }

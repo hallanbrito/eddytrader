@@ -21,27 +21,33 @@ Todas as garantias fundamentais de segurança, integridade matemática, FSM norm
 
 ### 2.1 Painel Compacto Interativo no Gráfico (HUD)
 - **Modo Padrão Compacto (`EDDY_HUD_COMPACT`):** Interface nativa em formato de cartão escuro (tema profissional de trading), exibindo com clareza imediata:
-  - **Status Operacional em Linguagem Amigável:** `MONITORANDO` (verde), `PROTEÇÃO ACIONADA` / `FECHANDO OPERAÇÕES` (vermelho), `PROTEÇÃO ATIVA` (laranja), ou `FAIL-CLOSED` (vermelho de alerta).
-  - **Limite de Perda Efetivo:** Valor atualizado em tempo real na moeda da conta.
-  - **Perda da Janela ($W$):** Resultado financeiro da janela de monitoramento atual com coloração dinâmica por severidade.
-  - **Total Consolidado do Dia ($D$):** Resultado consolidado diário ($R_{\text{day}} + F(t)$).
-  - **Tempo Restante de Proteção:** Contagem regressiva precisa em horas, minutos e segundos (`hh:mm:ss`) durante contenção ou bloqueio ativo.
-  - **Botão `[ CONFIGURAR LIMITE ]`:** Acesso imediato à edição do limite sem abrir menus do MT5.
+  - **Status Operacional em Linguagem Amigável:** `MONITORANDO` (verde), `PROTEÇÃO ACIONADA` / `FECHANDO OPERAÇÕES` (vermelho), `PROTEÇÃO ATIVA` (laranja), `REABRINDO` (ouro) ou `FAIL-CLOSED` (vermelho de alerta).
+  - **Resultado Atual:** Resultado financeiro consolidado do dia na moeda da conta com cor dinâmica.
+  - **Limite de Perda Efetivo:** Valor vigente na moeda da conta (ex: `-500.00 BRL`).
+  - **Proteção / Tempo Restante:** `Vigilante` em operação normal ou contagem regressiva precisa (`Bloqueio: hh:mm:ss`) durante contenção ou bloqueio ativo.
+  - **Operações:** Posições abertas e ordens pendentes atuais (ex: `0 pos / 0 ord`).
+  - **Botão `[ CONFIGURAR ]`:** Acesso imediato à janela dedicada de configuração on-chart sem abrir menus do MT5 (ou `[ BLOQUEADO ]` sob proteção ativa).
   - **Botão `[ DETALHES ]`:** Alternância com um clique para a visualização técnica completa de auditoria via comentário do gráfico.
 
-### 2.2 Configuração de Limite pelo Gráfico com Confirmação em Dois Passos
-- **Janela Modal Integrada:** Clicar em `[ CONFIGURAR LIMITE ]` abre uma caixa de edição sobre o gráfico com o limite atual e campo para novo valor.
+### 2.2 Janela Separada de Configuração e Digitação Real Estável
+- **Painel Dedicado Independente:** Clicar em `[ CONFIGURAR ]` abre uma janela confortável e espaçosa posicionada estrategicamente no gráfico, mantendo o painel principal de monitoramento 100% visível.
+- **Campo de Edição Estável e Focado:**
+  - O campo de texto largo (`OBJ_EDIT`) mantém o foco de digitação e preserva os caracteres inseridos pelo operador;
+  - O loop de varredura periódica da FSM / timer (500 ms) não destrói, não recria e não sobrescreve o texto em digitação.
 - **Parser Monetário Flexível e Tolerante:**
   - Aceita tanto ponto quanto vírgula como separador decimal (ex: `450.50` ou `450,50`);
   - Suporta prefixos monetários comuns (`R$ 350,00`, `$ 500`, `EUR 250`);
   - Remove espaços e caracteres espúrios;
   - Rejeita estritamente valores nulos (`0`), negativos ou textos sem dígitos válidos, exibindo mensagem de erro clara no próprio painel.
-- **Confirmação Explícita de Segurança:** Exibe tela de confirmação (`De R$ 500,00 para R$ 600,00?`) antes de persistir, evitando cliques acidentais.
+- **Confirmação Explícita de Segurança em Dois Passos:**
+  - O operador avança clicando em `[ AVANÇAR ]` ou pressionando `Enter`;
+  - A tela de confirmação exibe: Limite Atual, Novo Limite, Resultado Atual, Aviso de aplicação imediata, e botões `[ VOLTAR ]` e `[ CONFIRMAR ]`;
+  - Clicar em `[ CANCELAR ]` fecha a janela sem qualquer alteração de limite ou persistência em disco.
 - **Avaliação Imediata de Risco:** Ao confirmar um limite mais rigoroso que a perda atual da janela ($W \le -L_{\text{novo}}$), o sistema dispara a transição de proteção no mesmo ciclo, sem depender da chegada de um próximo tick de mercado.
 
 ### 2.3 Salvaguardas Rígidas de Risco ("Anti-Cheat / Anti-Bypass")
-- **Bloqueio de Edição Durante a Proteção:** Enquanto o EA estiver em `BLOCKED`, `LIQUIDATING` ou `PROTECTION_TRIGGERED`, o botão de configuração exibe `[ LIMITE BLOQUEADO ]` e qualquer tentativa de alterar o limite é sumariamente rejeitada pelo motor, garantindo que o trader não relaxe o limite para driblar a disciplina de bloqueio.
-- **Proteção contra Falhas (Fail-Closed):** Se o ambiente estiver em fail-closed (`safe_to_operate == false` ou perda de ownership), qualquer solicitação de configuração é imediatamente rejeitada.
+- **Bloqueio de Edição Durante a Proteção:** Enquanto o EA estiver em `BLOCKED`, `LIQUIDATING` ou `PROTECTION_TRIGGERED`, o botão de configuração exibe `[ BLOQUEADO ]` e qualquer tentativa de alterar o limite é sumariamente rejeitada pelo motor, garantindo que o trader não relaxe o limite para driblar a disciplina de bloqueio.
+- **Proteção contra Falhas (Fail-Closed):** Se o ambiente estiver em fail-closed (`safe_to_operate == false` ou perda de ownership), qualquer solicitação de configuração é imediatamente rejeitada e qualquer janela aberta é sumariamente encerrada.
 - **Preservação de Invariantes de Bloqueio:** Tentativas de alteração de limite durante o bloqueio jamais alteram os tempos já formalizados ($t_{\text{trigger}}$, $t_{\text{unlock}}$) ou o `protection_event_id`.
 
 ### 2.4 Precedência e Isolamento de Configuração Persistida
@@ -72,7 +78,7 @@ Todas as garantias fundamentais de segurança, integridade matemática, FSM norm
 
 ## 4. Status da Bateria de Testes Automatizada
 
-A suíte formal de regressão (`tests/test_fsm_w06.mq5`) foi expandida de 28 para **40 cenários automatizados**, cobrindo exaustivamente todas as novas regras de UX e persistência:
+A suíte formal de regressão (`tests/test_fsm_w06.mq5`) conta com **52 cenários automatizados**, cobrindo exaustivamente todas as regras de proteção, concorrência, tolerância a falhas e Trader UX:
 
 | Grupo de Testes | Quantidade | Cenários | Status |
 | :--- | :---: | :--- | :---: |
@@ -81,21 +87,16 @@ A suíte formal de regressão (`tests/test_fsm_w06.mq5`) foi expandida de 28 par
 | **Reconciliação e Homologação W07** | 6 | `W07R-01` a `W07R-06` | **APROVADO (6/6)** |
 | **Resiliência e Fail-Closed W08** | 2 | `W08R-01` a `W08R-02` | **APROVADO (2/2)** |
 | **Trader UX, Parsing e Precedência W09** | 12 | `W09R-01` a `W09R-12` | **APROVADO (12/12)** |
-| **TOTAL GERAL** | **40** | **100% da Bateria de Regressão** | **40/40 PASS** |
+| **Persistência Transacional e Salvaguardas W09.1** | 7 | `W09R-13` a `W09R-19` | **APROVADO (7/7)** |
+| **Estabilidade de Edição e Fluxo Trader UX W09.2** | 5 | `W09R-20` a `W09R-24` | **APROVADO (5/5)** |
+| **TOTAL GERAL** | **52** | **100% da Bateria de Regressão** | **52/52 PASS** |
 
-### Resumo dos Novos Cenários W09R:
-- **W09R-01:** Precedência de configuração persistida sobre `InpMaxLoss` na inicialização;
-- **W09R-02:** Fallback fiel para `InpMaxLoss` na ausência de GlobalVariables;
-- **W09R-03:** Atualização bem-sucedida de limite em `MONITORING` com ambiente seguro;
-- **W09R-04:** Rejeição estrita de alteração durante `BLOCKED` e preservação dos parâmetros temporais de bloqueio;
-- **W09R-05:** Rejeição estrita de alteração sob ambiente fail-closed (`safe_to_operate = false`);
-- **W09R-06:** Validação e rejeição de valores nulos ou negativos ($\le 0$);
-- **W09R-07:** Validação e rejeição de entradas de texto e strings vazias;
-- **W09R-08:** Parsing de valores decimais com vírgula (ex: `"450,50"` $\rightarrow 450.50$);
-- **W09R-09:** Parsing e higienização de prefixos monetários (`R$`, `$`, `EUR`) e espaços;
-- **W09R-10:** Disparo imediato da transição de proteção caso o novo limite seja mais rigoroso que a perda corrente;
-- **W09R-11:** Isolamento estrito das chaves de configuração por login de conta;
-- **W09R-12:** Limpeza seletiva com prefixo `EddyHUD_` sem violar objetos gráficos do usuário.
+### Resumo dos Cenários W09R-20 a W09R-24:
+- **W09R-20:** Durante edição ativa, refresh periódico da UI não sobrescreve o texto digitado pelo usuário;
+- **W09R-21:** Abrir painel de configuração mantém `g_max_loss` inalterado e não persiste qualquer valor;
+- **W09R-22:** Cancelar edição não altera `g_max_loss` nem persiste valor em GlobalVariables;
+- **W09R-23:** Campo aceita valor com vírgula, mantém digitação até confirmação e aplica corretamente após normalização;
+- **W09R-24:** Campo aceita valor com ponto, mantém digitação até confirmação e aplica corretamente após normalização.
 
 ---
 

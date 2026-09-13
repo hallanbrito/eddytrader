@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..19"
+#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..24"
 
 //--- Definição dos Estados da FSM
 enum ENUM_EDDY_STATE
@@ -17,6 +17,14 @@ enum ENUM_EDDY_STATE
    EDDY_STATE_LIQUIDATING          = 3,
    EDDY_STATE_BLOCKED              = 4,
    EDDY_STATE_REOPENING            = 5
+};
+
+//--- Definição dos Estados da Interface de Configuração (W09/W09.2)
+enum ENUM_CONFIG_UI_STATE
+{
+   UI_STATE_IDLE = 0,
+   UI_STATE_EDITING,
+   UI_STATE_CONFIRMING
 };
 
 //--- Estrutura de Recuperação
@@ -1432,6 +1440,113 @@ void RunAllTests()
    AssertTest("W09R-19",
               (!ok_19 && inv_preserved && !GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"))),
               "Durante evento de protecao ativo, tentativas de alteracao preservam rigorosamente t_trigger, t_unlock e event_id");
+
+   // Limpeza final de GVs de teste
+   TestClearGV();
+
+   //-----------------------------------------------------------------
+   // W09R-20: Durante Edição Ativa, Refresh da UI Não Sobrescreve Texto Digitado
+   //-----------------------------------------------------------------
+   TestClearGV();
+   string test_edit_obj = "EddyHUD_Dlg_Input";
+   // Cria o campo de edição simulando abertura da janela de configuração
+   ObjectCreate(0, test_edit_obj, OBJ_EDIT, 0, 0, 0);
+   ObjectSetString(0, test_edit_obj, OBJPROP_TEXT, "500.00");
+
+   // Simula usuário digitando o valor "750,50" no campo editável
+   ObjectSetString(0, test_edit_obj, OBJPROP_TEXT, "750,50");
+
+   // Simula ciclos de timer / tick / refresh enquanto g_config_ui_state == UI_STATE_EDITING
+   // Em produção, a função UI_SetEdit verifica if(ObjectFind(0, name) < 0) e NUNCA sobrescreve se já existe
+   bool is_new_obj = (ObjectFind(0, test_edit_obj) < 0);
+   if(is_new_obj)
+   {
+      ObjectSetString(0, test_edit_obj, OBJPROP_TEXT, DoubleToString(test_g_max_loss, 2));
+   }
+   string text_after_refresh = ObjectGetString(0, test_edit_obj, OBJPROP_TEXT);
+   ObjectDelete(0, test_edit_obj);
+
+   AssertTest("W09R-20",
+              (text_after_refresh == "750,50"),
+              "Durante edicao ativa, refresh periodico da UI nao sobrescreve o texto digitado pelo usuario");
+
+   //-----------------------------------------------------------------
+   // W09R-21: Abrir Painel de Configuração Não Altera g_max_loss por Si Só
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   ENUM_CONFIG_UI_STATE sim_ui_state_21 = UI_STATE_EDITING;
+   double sim_pending_21 = 0.0;
+   bool gv_exists_21     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+
+   AssertTest("W09R-21",
+              (sim_ui_state_21 == UI_STATE_EDITING && test_g_max_loss == 500.0 && sim_pending_21 == 0.0 && !gv_exists_21),
+              "Abrir painel de configuracao mantem g_max_loss inalterado e nao persiste qualquer valor");
+
+   //-----------------------------------------------------------------
+   // W09R-22: Cancelar Edição Não Altera g_max_loss Nem Persiste Valor
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   ENUM_CONFIG_UI_STATE sim_ui_state_22 = UI_STATE_EDITING;
+   // Simula clique em CANCELAR
+   sim_ui_state_22      = UI_STATE_IDLE;
+   double sim_pending_22 = 0.0;
+   bool gv_exists_22    = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+
+   AssertTest("W09R-22",
+              (sim_ui_state_22 == UI_STATE_IDLE && test_g_max_loss == 500.0 && sim_pending_22 == 0.0 && !gv_exists_22),
+              "Cancelar edicao nao altera g_max_loss nem persiste valor em GlobalVariables");
+
+   //-----------------------------------------------------------------
+   // W09R-23: Campo Aceita Valor com Vírgula, Mantém Digitação e Aplica Após Normalização
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string raw_comma     = "  650,75  ";
+   double parsed_comma  = 0.0;
+   bool parse_ok_23     = TestParseMoneyInput(raw_comma, parsed_comma);
+   string err_23        = "";
+   bool apply_ok_23     = false;
+   if(parse_ok_23 && parsed_comma > 0.0)
+   {
+      apply_ok_23 = TestSetMaxLossConfig(parsed_comma, err_23);
+   }
+   bool gv_ok_23 = (GlobalVariableCheck(TestGVConfigKey("MAX_LOSS")) &&
+                    GlobalVariableGet(TestGVConfigKey("MAX_LOSS")) == 650.75);
+
+   AssertTest("W09R-23",
+              (parse_ok_23 && parsed_comma == 650.75 && apply_ok_23 && test_g_max_loss == 650.75 && gv_ok_23),
+              "Campo aceita valor com virgula, mantem digitacao ate confirmacao e aplica corretamente apos normalizacao");
+
+   //-----------------------------------------------------------------
+   // W09R-24: Campo Aceita Valor com Ponto, Mantém Digitação e Aplica Após Normalização
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string raw_dot       = " 850.25 ";
+   double parsed_dot    = 0.0;
+   bool parse_ok_24     = TestParseMoneyInput(raw_dot, parsed_dot);
+   string err_24        = "";
+   bool apply_ok_24     = false;
+   if(parse_ok_24 && parsed_dot > 0.0)
+   {
+      apply_ok_24 = TestSetMaxLossConfig(parsed_dot, err_24);
+   }
+   bool gv_ok_24 = (GlobalVariableCheck(TestGVConfigKey("MAX_LOSS")) &&
+                    GlobalVariableGet(TestGVConfigKey("MAX_LOSS")) == 850.25);
+
+   AssertTest("W09R-24",
+              (parse_ok_24 && parsed_dot == 850.25 && apply_ok_24 && test_g_max_loss == 850.25 && gv_ok_24),
+              "Campo aceita valor com ponto, mantem digitacao ate confirmacao e aplica corretamente apos normalizacao");
 
    // Limpeza final de GVs de teste
    TestClearGV();

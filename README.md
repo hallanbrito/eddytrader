@@ -44,11 +44,11 @@ O EddyTrader atua sobre **toda a conta** — sem filtro por símbolo ou Magic Nu
 
 Com o novo painel compacto da versão `1.0.0-rc2`, você pode alterar o limite de perda **diretamente na tela do gráfico**:
 
-1. Clique no botão **[ CONFIGURAR LIMITE ]** no HUD.
-2. Digite o novo valor (ex: `750.00` ou `R$ 750,00`).
-3. Confirme em **[ SIM, APLICAR ]**.
+1. Clique no botão **[ CONFIGURAR ]** no HUD.
+2. Digite o novo limite no campo largo da janela (ex: `750.00` ou `750,50`) e clique em **[ AVANÇAR ]** (ou tecle Enter).
+3. Confira os valores na tela de confirmação e clique em **[ CONFIRMAR ]** (ou **[ VOLTAR ]** para corrigir).
 
-O limite é atualizado e gravado imediatamente para a sua conta, mesmo que o MetaTrader seja reiniciado.
+O limite é atualizado e persistido imediatamente para a sua conta, mesmo que o MetaTrader seja reiniciado.
 
 ### O que ele não faz
 

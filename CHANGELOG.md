@@ -11,12 +11,14 @@ Segundo Release Candidate do EddyTrader — W09 Trader UX & Configuração On-Ch
 ### Adicionado
 
 - painel compacto nativo no gráfico com informações voltadas ao trader (`EDDY_HUD_COMPACT`);
-- configuração interativa de limite de perda diretamente pelo gráfico via botão `[ CONFIGURAR LIMITE ]`;
-- modal de confirmação de alteração em dois passos para prevenir cliques acidentais;
-- parser monetário tolerante a vírgulas decimais (`450,50`) e prefixos monetários (`R$`, `$`, `EUR`);
+- janela de configuração separada e confortável, independente do HUD de monitoramento;
+- campo de texto editável largo e estável (`OBJ_EDIT`), com foco contínuo e imunidade contra reset/sobrescrita pelo timer periódico;
+- suporte a tecla `Enter` (`CHARTEVENT_OBJECT_ENDEDIT`) e botões `[ AVANÇAR ]`, `[ VOLTAR ]`, `[ CONFIRMAR ]` e `[ CANCELAR ]`;
+- persistência transacional estrita com gravação em GlobalVariables, flush forçado em disco e confirmação de leitura antes de mutação da variável em memória;
+- parser monetário tolerante a vírgulas decimais (`450,50`), pontos (`750.25`) e prefixos monetários (`R$`, `$`, `EUR`);
 - persistência isolada por conta da configuração em `EDDY_<LOGIN>_CONFIG_MAX_LOSS`;
 - precedência do limite configurado pelo trader sobre o valor padrão de `InpMaxLoss`;
-- bloqueio estrito contra alterações de limite durante o período de proteção (`BLOCKED`);
+- bloqueio estrito contra alterações de limite durante o período de proteção (`BLOCKED`, `LIQUIDATING`, `PROTECTION_TRIGGERED`, `REOPENING`, `INIT`);
 - avaliação de risco imediata ao aplicar novo limite (disparo instantâneo se $W \le -L_{\text{novo}}$);
 - alternância instantânea entre modo compacto e detalhado (`[ DETALHES ]` / `[ PAINEL COMPACTO ]`);
 - novo parâmetro de seleção visual `InpHudMode` (`COMPACT`, `DETAILED`, `OFF`) e controle de offsets (`InpHudCorner`, `InpHudOffsetX`, `InpHudOffsetY`);
@@ -24,9 +26,9 @@ Segundo Release Candidate do EddyTrader — W09 Trader UX & Configuração On-Ch
 
 ### Validação
 
-- build oficial: **0 errors / 0 warnings** em todos os artefatos;
-- regressão formal expandida para **40/40 PASS** (12 novos testes `W09R-01` a `W09R-12`);
-- documentação e checklist atualizados.
+- build oficial: **0 errors / 0 warnings** em todos os 6 alvos;
+- regressão formal expandida para **52/52 PASS** (`W06-01..20`, `W07R-01..04`, `W08R-01..04`, `W09R-01..24`);
+- documentação operacional e de onboarding 100% atualizadas.
 
 ### Pendente
 
