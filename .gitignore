@@ -2,3 +2,6 @@
 *.ex5
 *.log
 test_results.txt
+
+# Release packaging output
+dist/
