@@ -10,10 +10,15 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W07 — Testes Integrados e Homologação Operacional em Conta Demo`
-* **Status:** Homologado com Ressalvas (36/36 asserções aprovadas nos 15 cenários DEMO-01 a DEMO-15). As garantias de concorrência, retcodes de erro remoto (`retcode=10018`), persistência, recuperação de baseline $B_n = D(t_{\text{reopen}})$ via `REOPENING` e postura fail-closed foram homologadas em sessão com conta Demo conectada ao vivo (`ActivTradesCorp-Server`, login `6272676`, build 6193). A neutralização reativa via `OnTradeTransaction` foi validada no Strategy Tester com dados do broker (latência computacional interna de 20 $\mu$s e 36 $\mu$s), permanecendo catalogada a validação empírica ponta a ponta com pregão aberto no teste formal `LIVE-01`. Bateria unificada de regressão formal (`test_fsm_w06.mq5` com cenários W06-01 a 20 e W07R-01/02) 100% verde (22/22 PASS).
-* **Próxima Fase:** `W08 — Hardening, Observabilidade e Painel de Monitoramento (Sem Estratégia de Trading)`.
-* **Documentação da Entrega:** Detalhada formalmente em [14 — Homologação Operacional em Conta Demo (W07)](file:///C:/Projetos/eddytrader/docs/14-HOMOLOGACAO-W07.md).
+* **Fase:** `W08 — Hardening, Operação e Release Candidate do EddyTrader`
+* **Status:** Release Candidate 1 Aprovado com Ressalva Externa (`1.0.0-rc1`). Código endurecido, defensivo e determinístico (MQL5 puro, 0 dependências externas). Build oficial automatizado via PowerShell (`scripts/build.ps1`) com 0 erros e 0 warnings em todos os 6 artefatos compiláveis sob MetaEditor build 6193. Suíte de regressão formal (`test_fsm_w06.mq5`) 100% verde (28/28 asserções aprovadas). Homologação em conta Demo concluída em W07 (36/36 asserções aprovadas em 15 cenários DEMO-01 a 15). O gate final externo para liberação da versão de produção v1.0.0 permanece formalmente condicionado à execução do teste de neutralização reativa ponta a ponta `LIVE-01` exclusivamente em conta Demo com pregão aberto (DEMO ONLY) e correspondente aceitação da `ADR 0005`.
+* **Versão:** `1.0.0-rc1` (Release Candidate 1)
+* **Documentação Operacional e de Release:**
+  * [15 — Guia Operacional do EddyTrader](docs/15-GUIA-OPERACIONAL.md)
+  * [16 — Checklist de Release Candidate](docs/16-RELEASE-CHECKLIST.md)
+  * [17 — Release Notes 1.0.0-rc1](docs/17-RELEASE-NOTES-1.0.0-rc1.md)
+  * [14 — Homologação Operacional em Conta Demo (W07)](docs/14-HOMOLOGACAO-W07.md)
+  * [13 — Implementação do MVP (W06)](docs/13-IMPLEMENTACAO-MVP-W06.md)
 
 ---
 
@@ -28,22 +33,26 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Navegação na Documentação Normativa
 
-Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/`](file:///C:/Projetos/eddytrader/docs):
+Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/`](docs):
 
-1. [00 — Manifesto](file:///C:/Projetos/eddytrader/docs/00-MANIFESTO.md): Filosofia, problema fundamental e princípios de proteção.
-2. [01 — Visão Geral](file:///C:/Projetos/eddytrader/docs/01-VISAO-GERAL.md): Descrição funcional, público-alvo e fluxo conceitual.
-3. [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md): O que está dentro, fora e o que é terminantemente proibido.
-4. [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md): Requisitos Funcionais (RF) e Não-Funcionais (RNF) rastreáveis.
-5. [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md): Especificação dos fluxos operacionais e exceções.
-6. [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md): Regras de cálculo, disparo, liquidação e bloqueio.
-7. [06 — Arquitetura Conceitual](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md): Módulos conceituais, máquina de estados e questão do bloqueio no MT5.
-8. [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md): Menor produto viável e critérios objetivos de teste e aceite.
-9. [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
-10. [09 — Roadmap](file:///C:/Projetos/eddytrader/docs/09-ROADMAP.md): Planejamento incremental dos Work Packages (W).
-11. [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md): Modelagem determinística da perda, janelas operacionais, baseline e invariantes.
-12. [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md): Modelagem determinística da FSM, catálogo de estados, guards, transições proibidas e recuperação pós-restart.
-13. [12 — Spike Técnico MT5/MQL5](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md): Relatório exaustivo de garantias técnicas, eventos, liquidação, bloqueio e persistência no MT5.
-14. [13 — Implementação do MVP (W06)](file:///C:/Projetos/eddytrader/docs/13-IMPLEMENTACAO-MVP-W06.md): Arquitetura, estrutura de dados, garantias do EA e validação dos 20 cenários de teste na plataforma MT5.
+1. [00 — Manifesto](docs/00-MANIFESTO.md): Filosofia, problema fundamental e princípios de proteção.
+2. [01 — Visão Geral](docs/01-VISAO-GERAL.md): Descrição funcional, público-alvo e fluxo conceitual.
+3. [02 — Escopo e Limites](docs/02-ESCOPO-E-LIMITES.md): O que está dentro, fora e o que é terminantemente proibido.
+4. [03 — Requisitos](docs/03-REQUISITOS.md): Requisitos Funcionais (RF) e Não-Funcionais (RNF) rastreáveis.
+5. [04 — Casos de Uso](docs/04-CASOS-DE-USO.md): Especificação dos fluxos operacionais e exceções.
+6. [05 — Regras de Negócio](docs/05-REGRAS-DE-NEGOCIO.md): Regras de cálculo, disparo, liquidação e bloqueio.
+7. [06 — Arquitetura Conceitual](docs/06-ARQUITETURA-CONCEITUAL.md): Módulos conceituais, máquina de estados e questão do bloqueio no MT5.
+8. [07 — MVP](docs/07-MVP.md): Menor produto viável e critérios objetivos de teste e aceite.
+9. [08 — Riscos e Questões Abertas](docs/08-RISCOS-E-QUESTOES-ABERTAS.md): Catálogo de ambiguidades (GAPs), decisões (DQs) e riscos (RISKs).
+10. [09 — Roadmap](docs/09-ROADMAP.md): Planejamento incremental dos Work Packages (W).
+11. [10 — Especificação Matemática](docs/10-ESPECIFICACAO-MATEMATICA.md): Modelagem determinística da perda, janelas operacionais, baseline e invariantes.
+12. [11 — Máquina de Estados](docs/11-MAQUINA-DE-ESTADOS.md): Modelagem determinística da FSM, catálogo de estados, guards, transições proibidas e recuperação pós-restart.
+13. [12 — Spike Técnico MT5/MQL5](docs/12-SPIKE-TECNICO-MT5.md): Relatório exaustivo de garantias técnicas, eventos, liquidação, bloqueio e persistência no MT5.
+14. [13 — Implementação do MVP (W06)](docs/13-IMPLEMENTACAO-MVP-W06.md): Arquitetura, estrutura de dados, garantias do EA e validação dos 20 cenários de teste na plataforma MT5.
+15. [14 — Homologação Operacional em Conta Demo (W07)](docs/14-HOMOLOGACAO-W07.md): Homologação empírica em conta Demo, baterias DEMO-01 a DEMO-15 e regressão unificada.
+16. [15 — Guia Operacional](docs/15-GUIA-OPERACIONAL.md): Manual de instalação, configuração, operação, observabilidade HUD e plano de contingência.
+17. [16 — Checklist de Release Candidate](docs/16-RELEASE-CHECKLIST.md): Checklist rigoroso de qualidade, segurança defensiva, gates e conformidade normativa.
+18. [17 — Release Notes 1.0.0-rc1](docs/17-RELEASE-NOTES-1.0.0-rc1.md): Notas oficiais da versão Release Candidate 1.0.0-rc1.
 
 ### Registros de Decisões Arquiteturais (ADRs)
 * [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)

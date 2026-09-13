@@ -18,8 +18,7 @@ enum ENUM_EDDY_STATE
    EDDY_STATE_PROTECTION_TRIGGERED = 2,
    EDDY_STATE_LIQUIDATING          = 3,
    EDDY_STATE_BLOCKED              = 4,
-   EDDY_STATE_REOPENING            = 5,
-   EDDY_STATE_FAILED               = 6
+   EDDY_STATE_REOPENING            = 5
 };
 
 //--- Contexto Operacional do Teste

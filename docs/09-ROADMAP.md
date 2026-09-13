@@ -11,12 +11,12 @@ flowchart TD
     W01["W01: Fundação C.H. Documental (CONCLUÍDA)"] --> W02["W02: Resolução de Decisões Críticas e GAPs (CONCLUÍDA)"]
     W02 --> W03["W03: Especificação Matemática da Perda e Janelas (CONCLUÍDA)"]
     W03 --> W04["W04: Especificação Normativa da Máquina de Estados (CONCLUÍDA)"]
-    W04 --> W05["W05: Spike Técnico MT5/MQL5 (Bloqueio e Garantias)"]
-    W05 --> W06["W06: Primeiro EA Mínimo (Liquidação e Monitoramento)"]
-    W06 --> W07["W07: Módulo de Bloqueio Operacional e Desbloqueio"]
-    W07 --> W08["W08: Reconstrução Determinística e Persistência"]
-    W08 --> W09["W09: Testes Integrados e Validação em Conta Demo"]
-    W09 --> W10["W10: Endurecimento Operacional e Homologação Conta Real"]
+    W04 --> W05["W05: Spike Técnico MT5/MQL5 (CONCLUÍDA)"]
+    W05 --> W06["W06: Primeiro EA Mínimo e FSM Integrada (CONCLUÍDA)"]
+    W06 --> W07["W07: Testes Integrados e Homologação Demo (CONCLUÍDA)"]
+    W07 --> W08["W08: Hardening, Operação e Release Candidate (CONCLUÍDA)"]
+    W08 --> LIVE01["Gate LIVE-01: Validação de Neutralização em Pregão Aberto (PENDENTE)"]
+    LIVE01 --> V10["v1.0.0: Liberação de Produção para Conta Real"]
 ```
 
 ---
@@ -70,61 +70,57 @@ flowchart TD
 ---
 
 ### W05 — Spike Técnico MT5/MQL5 (Garantias e Bloqueio)
-* **Status:** **PRÓXIMA ETAPA RECOMENDADA**
+* **Status:** **CONCLUÍDA**
 * **Objetivo:** Conduzir testes laboratoriais em ambiente MetaTrader 5 para validar na prática:
   1. Eficácia e latência da neutralização reativa imediata via `OnTradeTransaction()` vs. ordens manuais do terminal ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-tecnico-de-bloqueio-operacional-no-mt5));
   2. Comportamento de liquidação a mercado sob Hedging e Netting ([DQ-002](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-002--tratamento-de-contas-netting-vs-hedging));
   3. Tolerância a slippage e deviation ([DQ-003](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-003--politica-de-slippage-e-deviation-em-fechamento-de-emergencia));
   4. Resposta a ativos com pregão fechado ([DQ-004](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-004--tratamento-de-ativos-com-mercado-fechado));
-  5. Validação empírica da recuperação dos dados mínimos de estado ($\mathbf{D}_{\text{min\_recovery}}$) a partir do histórico nativo do terminal vs. necessidade de persistência leve ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistência-e-reconstrução-de-estado-após-reinicialização)).
-* **Entregáveis:** Relatório técnico de evidências empíricas no MT5.
+  5. Validação empírica da recuperação dos dados mínimos de estado ($\mathbf{D}_{\text{min\_recovery}}$) a partir do histórico nativo do terminal vs. persistência em Global Variables ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistência-e-reconstrução-de-estado-após-reinicialização)).
+* **Entregáveis:** [12 — Spike Técnico MT5/MQL5](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md) e [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md).
 * **Critério de Conclusão:** Comprovação das garantias técnicas que o MQL5 nativo oferece para o bloqueio, liquidação e recuperação.
 
 ---
 
 ### W06 — Primeiro EA Mínimo (Liquidação e Monitoramento)
-* **Status:** Planejada
+* **Status:** **CONCLUÍDA**
 * **Objetivo:** Implementar o código MQL5 do primeiro Expert Advisor funcional com foco exclusivo em:
-  1. Parâmetro de entrada `InpDailyLossLimit` e validação estrita;
+  1. Parâmetro de entrada `InpMaxLoss` e validação estrita;
   2. Cálculo contínuo do resultado diário e flutuante;
   3. Detecção da condição de disparo;
   4. Varredura e emissão de ordens de liquidação a mercado para todas as posições da conta;
   5. Varredura e cancelamento de ordens pendentes;
-  6. Registro estruturado de logs de auditoria no Diário.
-* **Entregáveis:** Código-fonte MQL5 compilável do EA e módulos auxiliares mínimos (`.mq5` e `.mqh`).
-* **Critério de Conclusão:** EA compila com zero erros/avisos e liquida posições com sucesso no Strategy Tester / Demo.
+  6. Guarda de instância única via CAS atômico (`OWNER` + `HEARTBEAT`);
+  7. Registro estruturado de logs de auditoria no Diário.
+* **Entregáveis:** Código-fonte MQL5 compilável (`src/EddyTrader.mq5`, `src/EddyFSM.mqh`, `src/EddyMath.mqh`, `src/EddyTrade.mqh`, `src/EddyStorage.mqh`), harness de testes (`tests/test_fsm_w06.mq5`) e documentação [13 — Implementação do MVP (W06)](file:///C:/Projetos/eddytrader/docs/13-IMPLEMENTACAO-MVP-W06.md).
+* **Critério de Conclusão:** EA compila com 0 erros/avisos e 20/20 testes unitários/lógicos aprovados.
 
 ---
 
-### W07 — Módulo de Bloqueio Operacional e Desbloqueio
-* **Status:** Planejada
-* **Objetivo:** Implementar o controlador de tempo e o mecanismo de bloqueio de 4 horas a partir do acionamento, independência de virada de dia e nova janela via baseline de reabertura.
-* **Entregáveis:** Módulo MQL5 de controle de bloqueio e liberação temporal.
-* **Critério de Conclusão:** Cenários de bloqueio de 4 horas (inclusive atravessando 00:00:00) e liberação com baseline validados em Conta Demo.
+### W07 — Testes Integrados e Homologação Operacional em Conta Demo
+* **Status:** **CONCLUÍDA (HOMOLOGADO COM RESSALVAS)**
+* **Objetivo:** Validar empiricamente em ambiente de conta Demo conectada ao vivo todas as garantias técnicas, concorrência, retcodes remotos, recuperação e fluxo de reabertura.
+* **Entregáveis:** Documento [14 — Homologação Operacional em Conta Demo (W07)](file:///C:/Projetos/eddytrader/docs/14-HOMOLOGACAO-W07.md), bateria DEMO-01 a DEMO-15 (36/36 asserções aprovadas) e regressão formal unificada `test_fsm_w06.mq5` (26/26 asserções aprovadas).
+* **Critério de Conclusão:** Aprovação com ressalva externa: validação empírica da neutralização reativa ponta a ponta em pregão aberto formalizada como teste de aceitação `LIVE-01`.
 
 ---
 
-### W08 — Reconstrução Determinística e Persistência
-* **Status:** Planejada
-* **Objetivo:** Implementar a lógica de restauração de estado do EA após reinicialização do terminal baseada nas conclusões de W04 e W05.
-* **Entregáveis:** Módulo de recuperação de estado no `OnInit()`.
-* **Critério de Conclusão:** EA reiniciado em Conta Demo durante bloqueio ativo restaura o bloqueio com tempo exato remanescente sem falhas.
+### W08 — Hardening, Operação e Release Candidate do EddyTrader
+* **Status:** **CONCLUÍDA (RC1 APROVADO)**
+* **Objetivo:** Transformar o núcleo operacional existente em um Release Candidate formal (`1.0.0-rc1`), reprodutível, auditado estaticamente, defensivo e completamente documentado.
+* **Entregáveis:**
+  * Build oficial automatizado via PowerShell: `scripts/build.ps1` (compilação limpa de 6 artefatos, 0 erros, 0 warnings).
+  * Hardening de inputs, timer com fallback gracioso, flush síncrono e verificação booleana em persistência, rate-limiting de logs (5s) em retry de liquidação, tickets e símbolos estruturados.
+  * [15 — Guia Operacional do EddyTrader](file:///C:/Projetos/eddytrader/docs/15-GUIA-OPERACIONAL.md).
+  * [16 — Checklist de Release Candidate](file:///C:/Projetos/eddytrader/docs/16-RELEASE-CHECKLIST.md).
+  * [17 — Release Notes 1.0.0-rc1](file:///C:/Projetos/eddytrader/docs/17-RELEASE-NOTES-1.0.0-rc1.md).
+* **Critério de Conclusão:** Build limpo, suíte de regressão 28/28 aprovada, auditoria estática aprovada, checklist formal preenchido.
 
 ---
 
-### W09 — Testes Integrados e Validação em Conta Demo
-* **Status:** Planejada
-* **Objetivo:** Executar a bateria completa dos Casos de Teste do MVP ([TC-MVP-01 a TC-MVP-08](file:///C:/Projetos/eddytrader/docs/07-MVP.md#5-critérios-objetivos-de-aceite-do-mvp)) em ambiente de Conta Demo em tempo real.
-* **Entregáveis:** Relatório formal de homologação do MVP com logs de execução.
-* **Critério de Conclusão:** 100% de aprovação nos critérios de aceite do MVP.
-
----
-
-### W10 — Endurecimento Operacional e Homologação para Conta Real
-* **Status:** Planejada
-* **Objetivo:** Tratamento defensivo de edge cases, revisão de documentação final e liberação formal do produto.
-* **Entregáveis:** Release v1.0 do EddyTrader e guia operacional.
-* **Critério de Conclusão:** Aprovação formal para execução em Conta Real.
+### Gate Final para Produção v1.0.0
+* **Status:** **PENDENTE**
+* **Condição:** Execução com sucesso do teste formal `LIVE-01` exclusivamente em conta Demo com pregão aberto (DEMO ONLY) e consequente transição do `ADR 0005` de `Proposed` para `Accepted`.
 
 ---
 
@@ -136,4 +132,6 @@ flowchart TD
 * Critérios do MVP: [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md)
 * Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
 * Máquina de Estados Finita: [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md)
-* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md) e [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)
+* Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md) e [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md)
+* Guia Operacional e Release: [15 — Guia Operacional](file:///C:/Projetos/eddytrader/docs/15-GUIA-OPERACIONAL.md), [16 — Checklist de Release](file:///C:/Projetos/eddytrader/docs/16-RELEASE-CHECKLIST.md) e [17 — Release Notes](file:///C:/Projetos/eddytrader/docs/17-RELEASE-NOTES-1.0.0-rc1.md)
+

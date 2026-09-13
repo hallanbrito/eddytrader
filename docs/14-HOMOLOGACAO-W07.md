@@ -228,7 +228,7 @@ A bateria de testes formais de regressão foi expandida em `tests/test_fsm_w06.m
 
 ## 6. Especificação do Teste Remoto Pendente: `LIVE-01`
 
-Para encerrar formalmente a transição da validação de laboratório para a homologação em mercado real, define-se o procedimento formal do teste **`LIVE-01`**:
+Para encerrar formalmente a transição da validação de laboratório para a homologação final em mercado ao vivo (exclusivamente em conta Demo), define-se o procedimento formal do teste **`LIVE-01`**:
 
 * **Identificador:** `LIVE-01`
 * **Nome:** Validação de Neutralização Reativa e Latência Ponta a Ponta em Pregão Aberto

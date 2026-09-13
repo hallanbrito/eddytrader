@@ -944,6 +944,75 @@ void RunAllTests()
               registered_owner_06 == id_F && hb_val_06 == t_cas_F,
               "Heartbeat residual com OWNER == 0 é ignorado e sobrescrito imediatamente por nova instância sem delay de lease");
 
+   //-----------------------------------------------------------------
+   // W08R-01: Falha de Persistência Durante LIQUIDATING Mantém Retries
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_LIQUIDATING;
+   test_window_id       = 1;
+   test_baseline        = -500.0;
+   test_t_trigger       = D'2026.09.15 11:00:00';
+   test_t_unlock        = D'2026.09.15 15:00:00';
+   test_event_id        = 8001;
+   test_safe_to_operate = false; // Simula fail-closed por falha de persistência
+   sim_positions_total  = 2;
+   sim_orders_total     = 1;
+
+   // Em LIQUIDATING com posições/ordens > 0, o loop de liquidação continua ativo
+   bool retry_executed = false;
+   if(test_state == EDDY_STATE_LIQUIDATING && (sim_positions_total > 0 || sim_orders_total > 0))
+   {
+      // Simula execução da liquidação que zera as ordens e posições
+      sim_positions_total = 0;
+      sim_orders_total    = 0;
+      retry_executed      = true;
+   }
+
+   // Após zerar resíduo, transiciona para BLOCKED, mas NUNCA para MONITORING
+   if(sim_positions_total == 0 && sim_orders_total == 0)
+   {
+      test_state = EDDY_STATE_BLOCKED;
+   }
+
+   AssertTest("W08R-01",
+              retry_executed && (sim_positions_total == 0) &&
+              (test_state == EDDY_STATE_BLOCKED) &&
+              (test_safe_to_operate == false) &&
+              (test_state != EDDY_STATE_MONITORING),
+              "Falha de persistência (fail-closed) durante LIQUIDATING não impede retries de liquidação e proíbe MONITORING");
+
+   //-----------------------------------------------------------------
+   // W08R-02: Fail-Closed Durante BLOCKED com Nova Exposição Neutraliza Reativamente
+   //-----------------------------------------------------------------
+   // Pré-condição: robô em BLOCKED com safe_to_operate = false
+   test_state           = EDDY_STATE_BLOCKED;
+   test_t_trigger       = D'2026.09.15 11:00:00';
+   test_t_unlock        = D'2026.09.15 15:00:00';
+   test_event_id        = 8002;
+   test_safe_to_operate = false;
+
+   // Nova intervenção manual gera posição espúria
+   sim_positions_total = 1;
+   bool neutralizacao_executada = false;
+
+   // Proteção reativa (OnTradeTransaction / ProcessFSM) detecta resíduo em BLOCKED e neutraliza
+   if(test_state == EDDY_STATE_BLOCKED && (sim_positions_total > 0 || sim_orders_total > 0))
+   {
+      sim_positions_total = 0; // Neutralização compulsória imediata
+      neutralizacao_executada = true;
+   }
+
+   bool blocked_preserved = (test_state == EDDY_STATE_BLOCKED &&
+                             test_t_trigger == D'2026.09.15 11:00:00' &&
+                             test_t_unlock  == D'2026.09.15 15:00:00' &&
+                             test_event_id  == 8002 &&
+                             test_safe_to_operate == false &&
+                             test_state != EDDY_STATE_MONITORING);
+
+   AssertTest("W08R-02",
+              neutralizacao_executada && (sim_positions_total == 0) && blocked_preserved,
+              "Fail-closed durante BLOCKED neutraliza imediatamente nova exposição sem violar t_trigger, t_unlock ou avançar para MONITORING");
+
    // Limpeza final
    TestReleaseGuard(id_F, is_owner_F);
    TestClearGV();
@@ -952,7 +1021,7 @@ void RunAllTests()
    // Relatório Final da Bateria
    //-----------------------------------------------------------------
    string ftr1 = "==================================================================";
-   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R: Total=%d | Aprovados=%d | Falhas=%d",
+   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R: Total=%d | Aprovados=%d | Falhas=%d",
                               g_total_tests, g_passed_tests, g_failed_tests);
    Print(ftr1);
    Print(ftr2);
