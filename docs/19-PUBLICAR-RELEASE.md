@@ -1,32 +1,82 @@
 # Publicar uma Release do EddyTrader
 
-## Gerar os assets
+O repositório **não versiona binários `.ex5` no Git**. O binário é compilado localmente e anexado como asset da GitHub Release.
 
-Na raiz do repositório, execute:
+## Caminho recomendado — um comando
 
-    ./scripts/package_release.ps1
+Depois de atualizar a `master`:
 
-O script executa o build oficial e gera:
+```powershell
+git pull
+.\scripts\publish_release.ps1
+```
 
-    dist/EddyTrader-1.0.0-rc1.zip
-    dist/CHECKSUMS-1.0.0-rc1.txt
+O script:
 
-O binário principal compilado fica em:
+1. verifica se o GitHub CLI (`gh`) está instalado e autenticado;
+2. executa o build oficial;
+3. exige build limpo;
+4. gera ZIP e SHA-256;
+5. cria a tag/release `v1.0.0-rc1`;
+6. publica como **Pre-release**;
+7. anexa os três assets.
 
-    src/EddyTrader.ex5
+Assets publicados:
 
-## Publicar no GitHub
+```text
+EddyTrader.ex5
+EddyTrader-1.0.0-rc1.zip
+CHECKSUMS-1.0.0-rc1.txt
+```
 
-Enquanto LIVE-01 estiver pendente:
+## Pré-requisito: GitHub CLI
 
-- tag: v1.0.0-rc1
-- título: EddyTrader 1.0.0-rc1
-- marcar como Pre-release
+Se `gh` não estiver instalado:
 
-Anexar:
+```powershell
+winget install --id GitHub.cli
+```
 
-- EddyTrader.ex5
-- EddyTrader-1.0.0-rc1.zip
-- CHECKSUMS-1.0.0-rc1.txt
+Depois autentique uma vez:
 
-Após LIVE-01 PASS, promover para a release final v1.0.0.
+```powershell
+gh auth login
+```
+
+Escolha GitHub.com, HTTPS e autenticação via navegador.
+
+## Somente gerar os arquivos, sem publicar
+
+```powershell
+.\scripts\package_release.ps1
+```
+
+Saída:
+
+```text
+src\EddyTrader.ex5
+dist\EddyTrader-1.0.0-rc1.zip
+dist\CHECKSUMS-1.0.0-rc1.txt
+```
+
+## Verificar a Release
+
+Após publicação:
+
+```powershell
+gh release view v1.0.0-rc1
+```
+
+Ou abra:
+
+https://github.com/hallanbrito/eddytrader/releases
+
+## Regra do RC
+
+Enquanto `LIVE-01` estiver pendente:
+
+- versão: `1.0.0-rc1`;
+- release: **Pre-release**;
+- teste final: **DEMO ONLY**.
+
+Somente após `LIVE-01 PASS` a versão poderá ser promovida para `v1.0.0`.
