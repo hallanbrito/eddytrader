@@ -71,4 +71,4 @@ A promoção formal deste Release Candidate para a versão de produção **1.0.0
 
 * **`LIVE-01`:** Teste ponta a ponta de emissão de ordem manual e medição de latência de neutralização reativa exclusivamente em **conta Demo com sessão de mercado ao vivo aberta** (DEMO ONLY, `SymbolInfoInteger(SYMBOL_TRADE_MODE) == SYMBOL_TRADE_MODE_FULL`). A homologação jamais exige conta Real.
 
-Enquanto o teste `LIVE-01` permanecer em aberto (aguardando a abertura do calendário financeiro), o produto é formal e estritamente mantido como **Release Candidate (`1.0.0-rc1`)**, e o registro arquitetural [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md) permanece no status **`Proposed`**.
+Enquanto o teste `LIVE-01` permanecer em aberto (aguardando a abertura do calendário financeiro), o produto é formal e estritamente mantido como **Release Candidate (`1.0.0-rc1`)**, e o registro arquitetural [ADR 0005](adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md) permanece no status **`Proposed`**.
