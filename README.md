@@ -4,13 +4,13 @@
 > Monitora o resultado da conta, encerra posições e ordens pendentes ao atingir o limite configurado e mantém a proteção ativa por um período definido.
 
 [![MT5](https://img.shields.io/badge/MetaTrader%205-MQL5-blue)](https://www.metatrader5.com/)
-![Version](https://img.shields.io/badge/version-1.0.0--rc1-orange)
+![Version](https://img.shields.io/badge/version-1.0.0--rc2-orange)
 ![Build](https://img.shields.io/badge/build-0%20errors%20%7C%200%20warnings-brightgreen)
-![Tests](https://img.shields.io/badge/regression-28%2F28%20PASS-brightgreen)
+![Tests](https://img.shields.io/badge/regression-40%2F40%20PASS-brightgreen)
 
 ## Baixar
 
-**Versão atual:** `1.0.0-rc1` — Release Candidate.
+**Versão atual:** `1.0.0-rc2` — Release Candidate 2 (Trader UX & On-Chart Config).
 
 - **[Abrir página de Releases](https://github.com/hallanbrito/eddytrader/releases)** — local recomendado para baixar o `EddyTrader.ex5` quando o asset binário estiver publicado.
 - **[Baixar o código-fonte EddyTrader.mq5](src/EddyTrader.mq5)** — alternativa para quem prefere compilar no MetaEditor.
@@ -23,7 +23,7 @@
 
 ## O que o EddyTrader faz
 
-Você define um limite de perda. Exemplo:
+Você define um limite de perda diretamente pelo gráfico ou pelos parâmetros. Exemplo:
 
 ```text
 Perda máxima: 500,00 na moeda da conta
@@ -39,6 +39,16 @@ Quando a perda da janela operacional atinge o limite configurado, o EddyTrader:
 5. ao final do período, cria uma nova janela operacional com baseline própria e volta ao monitoramento.
 
 O EddyTrader atua sobre **toda a conta** — sem filtro por símbolo ou Magic Number.
+
+### Configuração pelo Gráfico (Sem Recompilar)
+
+Com o novo painel compacto da versão `1.0.0-rc2`, você pode alterar o limite de perda **diretamente na tela do gráfico**:
+
+1. Clique no botão **[ CONFIGURAR LIMITE ]** no HUD.
+2. Digite o novo valor (ex: `750.00` ou `R$ 750,00`).
+3. Confirme em **[ SIM, APLICAR ]**.
+
+O limite é atualizado e gravado imediatamente para a sua conta, mesmo que o MetaTrader seja reiniciado.
 
 ### O que ele não faz
 
@@ -64,7 +74,7 @@ O EddyTrader **não é uma estratégia de trading**. Ele não:
 7. Arraste o EddyTrader para **um único gráfico**.
 8. Marque **Permitir Algo Trading** e ative o botão **Algo Trading** no MT5.
 
-Pronto. O gráfico exibirá o HUD do EddyTrader com estado, perda monitorada, baseline e status da proteção.
+Pronto. O gráfico exibirá o painel compacto do EddyTrader com status amigável, perda monitorada, baseline e botões interativos de configuração.
 
 ➡️ Guia curto: [docs/18-QUICKSTART.md](docs/18-QUICKSTART.md)  
 ➡️ Manual completo: [docs/15-GUIA-OPERACIONAL.md](docs/15-GUIA-OPERACIONAL.md)
@@ -75,9 +85,13 @@ Pronto. O gráfico exibirá o HUD do EddyTrader com estado, perda monitorada, ba
 
 | Parâmetro | Padrão | O que significa |
 |---|---:|---|
-| `InpMaxLoss` | `500.0` | Limite de perda da janela, na moeda da conta |
-| `InpBlockDurationHours` | `4` | Duração contínua da proteção após o disparo |
-| `InpTimerIntervalMs` | `500` | Frequência de monitoramento interno |
+| `InpMaxLoss` | `500.0` | Limite de perda inicial da janela, na moeda da conta |
+| `InpBlockDurationHours` | `4` | Duração contínua da proteção após o disparo (1 a 168h) |
+| `InpHudMode` | `EDDY_HUD_COMPACT` | Modo do painel (`COMPACT`, `DETAILED`, `OFF`) |
+| `InpHudCorner` | `CORNER_LEFT_UPPER` | Canto do gráfico onde o painel é exibido |
+| `InpHudOffsetX` | `20` | Deslocamento horizontal do painel em pixels |
+| `InpHudOffsetY` | `30` | Deslocamento vertical do painel em pixels |
+| `InpTimerIntervalMs` | `500` | Frequência de monitoramento interno (ms) |
 | `InpDeviationPoints` | `10` | Desvio máximo usado nos fechamentos de emergência |
 
 ### Exemplo

@@ -6,13 +6,30 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "EddyTrader 1.0.0-rc1 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
+#property description "EddyTrader 1.0.0-rc2 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
 #property strict
 
 //--- Definições Formais do Produto e Versão
 #define EDDY_PRODUCT_NAME "EddyTrader"
-#define EDDY_VERSION      "1.0.0-rc1"
+#define EDDY_VERSION      "1.0.0-rc2"
 #define EDDY_PURPOSE      "Gerenciador de Risco Operacional e Limite de Perda Diária (MQL5 Nativo)"
+
+//--- Definições de Interface Gráfica (HUD)
+#define EDDY_UI_PREFIX "EddyHUD_"
+
+enum ENUM_EDDY_HUD_MODE
+{
+   EDDY_HUD_COMPACT   = 0, // Painel Compacto Trader (Interativo, no Gráfico)
+   EDDY_HUD_DETAILED  = 1, // Painel Técnico Detalhado (Auditoria / Engenharia)
+   EDDY_HUD_OFF       = 2  // HUD Desativado (Sem elementos no gráfico)
+};
+
+enum ENUM_CONFIG_UI_STATE
+{
+   UI_STATE_IDLE       = 0, // Exibição normal do painel compacto
+   UI_STATE_EDITING    = 1, // Modal de edição de limite aberta
+   UI_STATE_CONFIRMING = 2  // Modal de confirmação da alteração
+};
 
 #include <Trade\Trade.mqh>
 
@@ -20,8 +37,14 @@
 //| Parâmetros de Entrada (Inputs Mínimos Normativos)                |
 //+------------------------------------------------------------------+
 input group "=== Configurações de Risco ==="
-input double InpMaxLoss            = 500.0; // Perda Máxima Permitida por Janela (Moeda da Conta, > 0.0)
+input double InpMaxLoss            = 500.0; // Perda Máxima Inicial Padrão (Moeda da Conta, > 0.0)
 input int    InpBlockDurationHours = 4;     // Duração Contínua do Bloqueio (Horas, 1 a 168h)
+
+input group "=== Interface e Painel (UX) ==="
+input ENUM_EDDY_HUD_MODE InpHudMode    = EDDY_HUD_COMPACT;       // Modo Visual do Painel
+input ENUM_BASE_CORNER   InpHudCorner  = CORNER_LEFT_UPPER;      // Canto do Gráfico
+input int                InpHudOffsetX = 20;                     // Distância Horizontal (X) em Pixels
+input int                InpHudOffsetY = 30;                     // Distância Vertical (Y) em Pixels
 
 input group "=== Configurações Operacionais ==="
 input int    InpTimerIntervalMs    = 500;   // Intervalo de Varredura do Timer (Milissegundos, 50 a 5000)
@@ -55,21 +78,30 @@ struct EddyRecoveryState
 };
 
 //+------------------------------------------------------------------+
-//| Variáveis Globais de Estado Operacional                          |
+//| Variáveis Globais de Estado Operacional e Interface              |
 //+------------------------------------------------------------------+
-ENUM_EDDY_STATE g_current_state         = EDDY_STATE_INIT;
-int             g_window_id             = 0;
-double          g_baseline              = 0.0;
-datetime        g_t_trigger             = 0;
-datetime        g_t_unlock              = 0;
-ulong           g_protection_event_id   = 0;
-datetime        g_day_start             = 0;
-bool            g_safe_to_operate       = false;
+ENUM_EDDY_STATE      g_current_state          = EDDY_STATE_INIT;
+int                  g_window_id              = 0;
+double               g_baseline               = 0.0;
+datetime             g_t_trigger              = 0;
+datetime             g_t_unlock               = 0;
+ulong                g_protection_event_id    = 0;
+datetime             g_day_start              = 0;
+bool                 g_safe_to_operate        = false;
 
-ulong           g_account_login         = 0;
-ulong           g_instance_id           = 0;
-bool            g_is_owner              = false;
-CTrade          g_trade;
+// Estado mutável do limite de perda e painel UX
+double               g_max_loss               = 500.0;
+ENUM_EDDY_HUD_MODE   g_hud_mode               = EDDY_HUD_COMPACT;
+ENUM_CONFIG_UI_STATE g_config_ui_state        = UI_STATE_IDLE;
+double               g_pending_max_loss       = 0.0;
+string               g_config_feedback_msg    = "";
+datetime             g_config_feedback_expiry = 0;
+string               g_config_error_msg       = "";
+
+ulong                g_account_login          = 0;
+ulong                g_instance_id            = 0;
+bool                 g_is_owner               = false;
+CTrade               g_trade;
 
 //+------------------------------------------------------------------+
 //| Funções Auxiliares de Tempo e Servidor                           |
@@ -105,6 +137,11 @@ ulong GenerateProtectionEventId(datetime t_trigger)
 string GVKey(const string suffix)
 {
    return StringFormat("EDDY_%I64u_%s", g_account_login, suffix);
+}
+
+string GVConfigKey(const string suffix)
+{
+   return StringFormat("EDDY_%I64u_CONFIG_%s", g_account_login, suffix);
 }
 
 bool PersistState()
@@ -535,10 +572,409 @@ void CheckMidnightRollover()
 }
 
 //+------------------------------------------------------------------+
-//| Atualização Visual no Gráfico (HUD Limpo e Informativo)          |
+//| Funções Auxiliares de Tradução e Formatação para o Trader        |
 //+------------------------------------------------------------------+
-void UpdateHUD()
+string GetHumanStateName(ENUM_EDDY_STATE state)
 {
+   switch(state)
+   {
+      case EDDY_STATE_INIT:                 return "INICIALIZANDO";
+      case EDDY_STATE_MONITORING:           return "MONITORANDO";
+      case EDDY_STATE_PROTECTION_TRIGGERED: return "PROTECAO ACIONADA";
+      case EDDY_STATE_LIQUIDATING:          return "FECHANDO POSICOES";
+      case EDDY_STATE_BLOCKED:              return "BLOQUEIO ATIVO";
+      case EDDY_STATE_REOPENING:            return "REABRINDO";
+   }
+   return "DESCONHECIDO";
+}
+
+bool ParseMoneyInput(string input_str, double &out_val)
+{
+   out_val = 0.0;
+   StringTrimLeft(input_str);
+   StringTrimRight(input_str);
+   if(StringLen(input_str) == 0)
+      return false;
+
+   string s = input_str;
+   StringToUpper(s);
+   StringReplace(s, "R$", "");
+   StringReplace(s, "$", "");
+   StringReplace(s, "BRL", "");
+   StringReplace(s, "USD", "");
+   StringReplace(s, "EUR", "");
+   StringReplace(s, " ", "");
+   StringReplace(s, ",", ".");
+
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   if(StringLen(s) == 0)
+      return false;
+
+   int dot_count = 0;
+   int digit_count = 0;
+   for(int i = 0; i < StringLen(s); i++)
+   {
+      ushort ch = StringGetCharacter(s, i);
+      if(ch >= '0' && ch <= '9')
+      {
+         digit_count++;
+      }
+      else if(ch == '.')
+      {
+         dot_count++;
+         if(dot_count > 1)
+            return false;
+      }
+      else
+      {
+         return false;
+      }
+   }
+
+   if(digit_count == 0)
+      return false;
+
+   double val = StringToDouble(s);
+   if(val <= 0.0)
+      return false;
+
+   out_val = NormalizeDouble(val, 2);
+   return true;
+}
+
+bool SetMaxLossConfig(double new_limit, string &err_msg)
+{
+   // 1. Validar novo valor e condições operacionais
+   if(new_limit <= 0.0)
+   {
+      err_msg = "Limite deve ser maior que zero (> 0.0).";
+      return false;
+   }
+
+   // Regra inegociável de segurança: só permite alteração em MONITORING com safe_to_operate == true
+   if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate)
+   {
+      err_msg = "Alteracao proibida: EA nao esta em MONITORING seguro.";
+      PrintFormat("[EddyTrader][WARN] Tentativa de alterar limite de perda rejeitada! Estado=%s, safe_to_operate=%d",
+                  EnumToString(g_current_state), (int)g_safe_to_operate);
+      return false;
+   }
+
+   // 2. Gravar Global Variable
+   string key = GVConfigKey("MAX_LOSS");
+   ResetLastError();
+   datetime set_res = GlobalVariableSet(key, new_limit);
+   int set_err = GetLastError();
+   if(set_res == 0 && set_err != 0)
+   {
+      err_msg = "Falha ao gravar configuracao no terminal MT5.";
+      PrintFormat("[EddyTrader][CRITICAL] Falha ao persistir limite %s nas Global Variables! Erro: %d",
+                  key, set_err);
+      return false;
+   }
+
+   // 3. Executar GlobalVariablesFlush()
+   GlobalVariablesFlush();
+
+   // 4. Confirmar sucesso da persistência (leitura atômica de volta)
+   ResetLastError();
+   if(!GlobalVariableCheck(key))
+   {
+      err_msg = "Falha na verificacao da chave persistida nas Global Variables.";
+      PrintFormat("[EddyTrader][CRITICAL] Chave %s nao encontrada apos tentativa de persistencia!", key);
+      return false;
+   }
+
+   double read_back = GlobalVariableGet(key);
+   if(read_back != new_limit)
+   {
+      err_msg = "Inconsistencia no valor gravado nas Global Variables.";
+      PrintFormat("[EddyTrader][CRITICAL] Valor lido de %s (%.2f) diverge do solicitado (%.2f)!",
+                  key, read_back, new_limit);
+      return false;
+   }
+
+   // 5. Somente então atualizar g_max_loss
+   PrintFormat("[EddyTrader][INFO] Limite de perda confirmado e persistido: %.2f -> %.2f (chave=%s)",
+               g_max_loss, new_limit, key);
+   g_max_loss = new_limit;
+   err_msg = "";
+
+   // 6. Executar a avaliação normal da FSM
+   ProcessFSM();
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Primitivas de Manipulação de Objetos Gráficos Nativos            |
+//+------------------------------------------------------------------+
+void UI_SetRect(const string name, int x, int y, int w, int h, color bg_clr, color border_clr = clrNONE)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, border_clr);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, (border_clr != clrNONE) ? BORDER_FLAT : BORDER_SUNKEN);
+}
+
+void UI_SetLabel(const string name, int x, int y, const string text, color clr, int font_size = 9, bool bold = false)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetString(0, name, OBJPROP_FONT, bold ? "Arial Bold" : "Segoe UI");
+}
+
+void UI_SetButton(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 8)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, text_clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI");
+   ObjectSetInteger(0, name, OBJPROP_STATE, false);
+}
+
+void UI_SetEdit(const string name, int x, int y, int w, int h, const string text, color bg_clr, color text_clr, int font_size = 9)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_EDIT, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, InpHudCorner);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_READONLY, false);
+      ObjectSetInteger(0, name, OBJPROP_ALIGN, ALIGN_CENTER);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, text_clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI");
+}
+
+void UI_DeleteAll()
+{
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX);
+   ChartRedraw(0);
+}
+
+void UI_DeleteModal()
+{
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Bg");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Title");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Cur");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Input");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Err");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Save");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Cancel");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Confirm");
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Renderizadores dos Modos Visuais de Interface                    |
+//+------------------------------------------------------------------+
+void RenderConfigDialog()
+{
+   string curr = AccountInfoString(ACCOUNT_CURRENCY);
+
+   if(g_config_ui_state == UI_STATE_EDITING)
+   {
+      UI_SetRect(EDDY_UI_PREFIX + "Modal_Bg", 0, 0, 260, 180, C'20,24,35', C'0,150,214');
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Title", 14, 12, "ALTERAR LIMITE DE PERDA", clrWhite, 9, true);
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Cur", 14, 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'180,190,200', 8);
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Lbl", 14, 58, "Novo Limite (ex: 750.00):", clrWhite, 8);
+
+      string input_obj = EDDY_UI_PREFIX + "Modal_Input";
+      if(ObjectFind(0, input_obj) < 0)
+      {
+         UI_SetEdit(input_obj, 14, 78, 232, 24, DoubleToString(g_max_loss, 2), C'30,35,48', clrWhite, 9);
+      }
+
+      string err_txt = (g_config_error_msg != "") ? g_config_error_msg : "Digite o novo valor desejado";
+      color err_clr  = (g_config_error_msg != "") ? C'240,80,80' : C'140,150,165';
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Err", 14, 108, err_txt, err_clr, 8);
+
+      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Save", 14, 138, 110, 26, "AVANCAR", C'0,122,204', clrWhite, 8);
+      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Cancel", 136, 138, 110, 26, "CANCELAR", C'60,65,75', clrWhite, 8);
+      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Confirm");
+   }
+   else if(g_config_ui_state == UI_STATE_CONFIRMING)
+   {
+      UI_SetRect(EDDY_UI_PREFIX + "Modal_Bg", 0, 0, 260, 180, C'20,24,35', C'243,156,18');
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Title", 14, 12, "CONFIRMAR ALTERACAO", clrGold, 9, true);
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Cur", 14, 38, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'180,190,200', 8);
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Lbl", 14, 62, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
+      UI_SetLabel(EDDY_UI_PREFIX + "Modal_Err", 14, 95, "Deseja aplicar o novo limite?", C'220,220,220', 8);
+
+      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Input");
+      ObjectDelete(0, EDDY_UI_PREFIX + "Modal_Btn_Save");
+      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Confirm", 14, 138, 110, 26, "SIM, APLICAR", C'39,174,96', clrWhite, 8);
+      UI_SetButton(EDDY_UI_PREFIX + "Modal_Btn_Cancel", 136, 138, 110, 26, "CANCELAR", C'60,65,75', clrWhite, 8);
+   }
+   ChartRedraw(0);
+}
+
+void RenderCompactHUD()
+{
+   Comment(""); // Mantém área de comentário limpa no modo compacto
+
+   if(g_config_ui_state != UI_STATE_IDLE)
+   {
+      RenderConfigDialog();
+      return;
+   }
+
+   // Limpa qualquer modal residual
+   UI_DeleteModal();
+
+   datetime t_now = GetServerTimeSafe();
+   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
+   double F       = CalculateFloatingResult();
+   double D       = R_day + F;
+   double W       = CalculateWindowResult(D, g_baseline);
+   string curr    = AccountInfoString(ACCOUNT_CURRENCY);
+   string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
+
+   // Cartão base
+   UI_SetRect(EDDY_UI_PREFIX + "CardBg", 0, 0, 260, 180, C'24,28,37', C'45,55,72');
+   UI_SetLabel(EDDY_UI_PREFIX + "Title", 14, 12, "EDDYTRADER", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Mode", 175, 13, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'140,150,165', 7);
+
+   // Linha de Status
+   UI_SetLabel(EDDY_UI_PREFIX + "Status_Lbl", 14, 36, "Status:", C'160,170,185', 8);
+   string status_str = GetHumanStateName(g_current_state);
+   color status_clr  = clrWhite;
+   switch(g_current_state)
+   {
+      case EDDY_STATE_MONITORING:           status_clr = C'46,204,113'; break; // Verde esmeralda
+      case EDDY_STATE_PROTECTION_TRIGGERED:
+      case EDDY_STATE_LIQUIDATING:          status_clr = C'231,76,60';  break; // Vermelho
+      case EDDY_STATE_BLOCKED:              status_clr = C'243,156,18'; break; // Laranja âmbar
+      default:                              status_clr = clrGold;       break;
+   }
+   if(!g_is_owner || !g_safe_to_operate)
+   {
+      status_str = "FAIL-CLOSED";
+      status_clr = clrRed;
+   }
+   UI_SetLabel(EDDY_UI_PREFIX + "Status_Val", 85, 35, status_str, status_clr, 9, true);
+
+   // Linha de Limite de Perda
+   UI_SetLabel(EDDY_UI_PREFIX + "Limit_Lbl", 14, 58, "Limite Perda:", C'160,170,185', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Limit_Val", 100, 58, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
+
+   // Linha de Resultado da Janela (W)
+   UI_SetLabel(EDDY_UI_PREFIX + "Win_Lbl", 14, 78, "Perda Janela:", C'160,170,185', 8);
+   color w_clr = (W >= 0) ? C'46,204,113' : ((W <= -g_max_loss * 0.7) ? C'231,76,60' : C'243,156,18');
+   UI_SetLabel(EDDY_UI_PREFIX + "Win_Val", 100, 78, StringFormat("%+.2f %s", W, curr), w_clr, 8, true);
+
+   // Linha de Resultado Consolidado do Dia (D)
+   UI_SetLabel(EDDY_UI_PREFIX + "Day_Lbl", 14, 98, "Total do Dia:", C'160,170,185', 8);
+   color d_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+   UI_SetLabel(EDDY_UI_PREFIX + "Day_Val", 100, 98, StringFormat("%+.2f %s", D, curr), d_clr, 8, true);
+
+   // Linha de Mensagem / Bloqueio / Feedback
+   string sub_msg = "";
+   color  sub_clr = C'120,130,145';
+   if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
+   {
+      long rem_sec = (long)(g_t_unlock - t_now);
+      if(rem_sec < 0) rem_sec = 0;
+      int h = (int)(rem_sec / 3600);
+      int m = (int)((rem_sec % 3600) / 60);
+      int s = (int)(rem_sec % 60);
+      sub_msg = StringFormat("Bloqueio restante: %02d:%02d:%02d", h, m, s);
+      sub_clr = C'243,156,18';
+   }
+   else if(g_config_feedback_msg != "" && t_now <= g_config_feedback_expiry)
+   {
+      sub_msg = g_config_feedback_msg;
+      sub_clr = C'46,204,113';
+   }
+   else
+   {
+      sub_msg = StringFormat("Janela J%d | Baseline: %.2f", g_window_id, g_baseline);
+      sub_clr = C'120,130,145';
+   }
+   UI_SetLabel(EDDY_UI_PREFIX + "Msg", 14, 118, sub_msg, sub_clr, 8);
+
+   // Botões Interativos
+   bool can_configure = (g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner);
+   if(can_configure)
+   {
+      UI_SetButton(EDDY_UI_PREFIX + "Btn_Config", 14, 142, 140, 24, "CONFIGURAR LIMITE", C'0,122,204', clrWhite, 8);
+   }
+   else
+   {
+      UI_SetButton(EDDY_UI_PREFIX + "Btn_Config", 14, 142, 140, 24, "LIMITE BLOQUEADO", C'50,55,65', C'120,125,135', 8);
+   }
+   UI_SetButton(EDDY_UI_PREFIX + "Btn_Mode", 160, 142, 86, 24, "DETALHES", C'45,55,72', clrWhite, 8);
+
+   ChartRedraw(0);
+}
+
+void RenderDetailedHUD()
+{
+   // Limpa objetos do painel compacto e modais
+   UI_DeleteModal();
+   ObjectDelete(0, EDDY_UI_PREFIX + "CardBg");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Title");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Mode");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Status_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Status_Val");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Limit_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Limit_Val");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Win_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Win_Val");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Day_Lbl");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Day_Val");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Msg");
+   ObjectDelete(0, EDDY_UI_PREFIX + "Btn_Config");
+
+   // Botão para retornar ao compacto
+   UI_SetButton(EDDY_UI_PREFIX + "Btn_Mode", 10, 10, 160, 24, "[ PAINEL COMPACTO ]", C'0,122,204', clrWhite, 8);
+   ChartRedraw(0);
+
    datetime t_now = GetServerTimeSafe();
    double R_day = CalculateRealizedResultToday(g_day_start, t_now);
    double F = CalculateFloatingResult();
@@ -570,28 +1006,28 @@ void UpdateHUD()
 
    string hud = StringFormat(
       "====================================================\n"
-      " %s v%s - Release Candidate 1\n"
+      " %s v%s - Release Candidate 2\n"
       " %s\n"
       "====================================================\n"
       "%s"
       " Conta: %I64u | Modo: %s | Servidor: %s\n"
-      " Instância: #%I64u (Owner: %s)\n"
-      " Horário Servidor: %s\n"
+      " Instancia: #%I64u (Owner: %s)\n"
+      " Horario Servidor: %s\n"
       "----------------------------------------------------\n"
-      " Estado FSM: %s\n"
+      " Estado FSM: %s (%s)\n"
       " Janela Ativa: J%d | Baseline (Bn): %.2f\n"
-      " Perda Máxima Permitida (L): -%.2f\n"
+      " Perda Maxima Efetiva (L): -%.2f\n"
       "----------------------------------------------------\n"
       " R_day (Realizado Hoje):    %.2f %s\n"
-      " F(t)  (Flutuante Líquido): %.2f %s\n"
+      " F(t)  (Flutuante Liquido): %.2f %s\n"
       " D(t)  (Consolidado Hoje):  %.2f %s\n"
       " W_n(t)(Resultado Janela):  %.2f %s\n"
       "----------------------------------------------------\n"
-      " Status de Proteção: %s\n"
+      " Status de Protecao: %s\n"
       " ID do Evento: %I64u\n"
-      " Informação de Bloqueio: %s\n"
-      " Posições Abertas: %d | Ordens Pendentes: %d\n"
-      " Negociação Autorizada: %s\n"
+      " Informacao de Bloqueio: %s\n"
+      " Posicoes Abertas: %d | Ordens Pendentes: %d\n"
+      " Negociacao Autorizada: %s\n"
       "====================================================",
       EDDY_PRODUCT_NAME, EDDY_VERSION,
       EDDY_PURPOSE,
@@ -602,14 +1038,14 @@ void UpdateHUD()
       g_instance_id,
       (g_is_owner ? "SIM" : "NAO"),
       TimeToString(t_now, TIME_DATE|TIME_SECONDS),
-      EnumToString(g_current_state),
+      EnumToString(g_current_state), GetHumanStateName(g_current_state),
       g_window_id, g_baseline,
-      InpMaxLoss,
+      g_max_loss,
       R_day, AccountInfoString(ACCOUNT_CURRENCY),
       F, AccountInfoString(ACCOUNT_CURRENCY),
       D, AccountInfoString(ACCOUNT_CURRENCY),
       W, AccountInfoString(ACCOUNT_CURRENCY),
-      (g_current_state == EDDY_STATE_MONITORING ? "NOMINAL / VIGILANTE" : "PROTEÇÃO ATIVADA"),
+      (g_current_state == EDDY_STATE_MONITORING ? "NOMINAL / VIGILANTE" : "PROTECAO ATIVADA"),
       g_protection_event_id,
       lock_info,
       PositionsTotal(), OrdersTotal(),
@@ -617,6 +1053,40 @@ void UpdateHUD()
    );
 
    Comment(hud);
+}
+
+void RenderOffHUD()
+{
+   UI_DeleteAll();
+
+   // OFF + fail-closed / erro operacional crítico -> aviso textual mínimo de segurança
+   if(!g_is_owner || !g_safe_to_operate)
+   {
+      string critical_msg = StringFormat(
+         ">>> ATENCAO: EDDYTRADER EM FAIL-CLOSED / OPERACAO BLOQUEADA <<<\n"
+         " Motivo: %s | Estado: %s | Conta: %I64u",
+         (!g_is_owner ? "OWNERSHIP PERDIDA" : "SEGURANCA OPERACIONAL COMPROMETIDA"),
+         EnumToString(g_current_state),
+         g_account_login
+      );
+      Comment(critical_msg);
+   }
+   else
+   {
+      // OFF + operação normal -> gráfico limpo
+      Comment("");
+   }
+}
+
+void UpdateHUD()
+{
+   switch(g_hud_mode)
+   {
+      case EDDY_HUD_OFF:      RenderOffHUD();      break;
+      case EDDY_HUD_DETAILED: RenderDetailedHUD(); break;
+      case EDDY_HUD_COMPACT:
+      default:                RenderCompactHUD();  break;
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -764,10 +1234,10 @@ void ProcessFSM()
          double W = CalculateWindowResult(D, g_baseline);
 
          // T04: Avalia violação do limite financeiro da janela
-         if(W <= -InpMaxLoss)
+         if(W <= -g_max_loss)
          {
             PrintFormat("[EddyTrader][WARN] T04: Limite violado! W=%.2f <= -L=-%.2f (D=%.2f, Bn=%.2f)",
-                        W, InpMaxLoss, D, g_baseline);
+                        W, g_max_loss, D, g_baseline);
             TransitionTo(EDDY_STATE_PROTECTION_TRIGGERED);
          }
          break;
@@ -844,7 +1314,7 @@ void ProcessFSM()
 int OnInit()
 {
    Print("[EddyTrader][INFO] ==================================================");
-   PrintFormat("[EddyTrader][INFO] Inicializando %s v%s - Release Candidate 1", EDDY_PRODUCT_NAME, EDDY_VERSION);
+   PrintFormat("[EddyTrader][INFO] Inicializando %s v%s - Release Candidate 2", EDDY_PRODUCT_NAME, EDDY_VERSION);
    PrintFormat("[EddyTrader][INFO] %s", EDDY_PURPOSE);
    Print("[EddyTrader][INFO] ==================================================");
 
@@ -867,6 +1337,11 @@ int OnInit()
    if(InpDeviationPoints > 500)
    {
       PrintFormat("[EddyTrader][ERROR] Parâmetro inválido: InpDeviationPoints excessivo (máx 500 pontos, configurado: %I64u)", InpDeviationPoints);
+      return INIT_PARAMETERS_INCORRECT;
+   }
+   if(InpHudOffsetX < 0 || InpHudOffsetY < 0)
+   {
+      PrintFormat("[EddyTrader][ERROR] Parâmetro inválido: Offsets de HUD não podem ser negativos (X=%d, Y=%d)", InpHudOffsetX, InpHudOffsetY);
       return INIT_PARAMETERS_INCORRECT;
    }
 
@@ -899,11 +1374,37 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   // 4. Marcação temporal do dia operacional
+   // 4. Resolução do Limite Efetivo de Perda e Configuração de Interface
+   g_hud_mode = InpHudMode;
+   string config_key = GVConfigKey("MAX_LOSS");
+   if(GlobalVariableCheck(config_key))
+   {
+      double persisted_limit = GlobalVariableGet(config_key);
+      if(persisted_limit > 0.0)
+      {
+         g_max_loss = persisted_limit;
+         PrintFormat("[EddyTrader][INFO] Limite de perda carregado da configuração persistida: %.2f (Input=%.2f)",
+                     g_max_loss, InpMaxLoss);
+      }
+      else
+      {
+         g_max_loss = InpMaxLoss;
+         PrintFormat("[EddyTrader][WARN] Limite persistido inválido (%.2f). Usando InpMaxLoss=%.2f",
+                     persisted_limit, InpMaxLoss);
+      }
+   }
+   else
+   {
+      g_max_loss = InpMaxLoss;
+      PrintFormat("[EddyTrader][INFO] Nenhuma configuração persistida prévia. Usando InpMaxLoss=%.2f",
+                  g_max_loss);
+   }
+
+   // 5. Marcação temporal do dia operacional
    datetime t_now = GetServerTimeSafe();
    g_day_start = GetDayStart(t_now);
 
-   // 5. Reconstituição Determinística de Estado (ADR 0004 / ADR 0005)
+   // 6. Reconstituição Determinística de Estado (ADR 0004 / ADR 0005)
    EddyRecoveryState rec;
    if(LoadState(rec))
    {
@@ -1023,7 +1524,7 @@ int OnInit()
       }
    }
 
-   // 7. Avaliação inicial da FSM
+   // 8. Avaliação inicial da FSM
    ProcessFSM();
 
    return INIT_SUCCEEDED;
@@ -1033,6 +1534,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    ReleaseInstanceGuard();
+   UI_DeleteAll();
    Comment(""); // Limpa o HUD gráfico
    PrintFormat("[EddyTrader][INFO] EA descarregado da conta %I64u. Razão: %d", g_account_login, reason);
 }
@@ -1087,5 +1589,96 @@ void OnTrade()
    }
 
    ProcessFSM();
+}
+
+//+------------------------------------------------------------------+
+//| Evento de Gráfico: Interação do Trader com o HUD no Gráfico      |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam)
+{
+   if(id == CHARTEVENT_OBJECT_CLICK)
+   {
+      if(sparam == EDDY_UI_PREFIX + "Btn_Config")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         if(g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner)
+         {
+            g_config_ui_state = UI_STATE_EDITING;
+            g_config_error_msg = "";
+            UpdateHUD();
+         }
+         else
+         {
+            Print("[EddyTrader][WARN] Configuração de limite indisponível fora de MONITORING.");
+         }
+      }
+      else if(sparam == EDDY_UI_PREFIX + "Btn_Mode")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         if(g_hud_mode == EDDY_HUD_COMPACT)
+         {
+            g_hud_mode = EDDY_HUD_DETAILED;
+         }
+         else
+         {
+            g_hud_mode = EDDY_HUD_COMPACT;
+            Comment("");
+         }
+         UI_DeleteAll();
+         UpdateHUD();
+      }
+      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Save")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         string input_obj = EDDY_UI_PREFIX + "Modal_Input";
+         string txt = ObjectGetString(0, input_obj, OBJPROP_TEXT);
+         double val = 0.0;
+         if(!ParseMoneyInput(txt, val) || val <= 0.0)
+         {
+            g_config_error_msg = "Valor inválido! Digite valor > 0.";
+            UpdateHUD();
+         }
+         else
+         {
+            g_pending_max_loss = val;
+            g_config_ui_state  = UI_STATE_CONFIRMING;
+            g_config_error_msg = "";
+            UpdateHUD();
+         }
+      }
+      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Confirm")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         string err = "";
+         if(SetMaxLossConfig(g_pending_max_loss, err))
+         {
+            g_config_ui_state = UI_STATE_IDLE;
+            g_config_feedback_msg = StringFormat("Limite atualizado para %.2f!", g_max_loss);
+            g_config_feedback_expiry = GetServerTimeSafe() + 5;
+            g_pending_max_loss = 0.0;
+            g_config_error_msg = "";
+            UI_DeleteModal();
+            UpdateHUD();
+         }
+         else
+         {
+            g_config_ui_state = UI_STATE_EDITING;
+            g_config_error_msg = err;
+            UpdateHUD();
+         }
+      }
+      else if(sparam == EDDY_UI_PREFIX + "Modal_Btn_Cancel")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         g_config_ui_state = UI_STATE_IDLE;
+         g_pending_max_loss = 0.0;
+         g_config_error_msg = "";
+         UI_DeleteModal();
+         UpdateHUD();
+      }
+   }
 }
 //+------------------------------------------------------------------+

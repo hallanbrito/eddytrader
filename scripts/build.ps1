@@ -19,7 +19,7 @@ if (-not (Test-Path $metaeditor)) {
 }
 
 Write-Host "================================================================"
-Write-Host " EddyTrader Build Reproduzível — Release Candidate 1.0.0-rc1"
+Write-Host " EddyTrader Build Reproduzível — Release Candidate 1.0.0-rc2"
 Write-Host " Compilador: $metaeditor"
 Write-Host "================================================================"
 
