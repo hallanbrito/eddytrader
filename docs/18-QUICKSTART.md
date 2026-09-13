@@ -52,29 +52,30 @@ Exemplo:
 
 ## 4. Confira o Painel no Gráfico (HUD)
 
-Depois de anexar o EA, o painel compacto exibirá:
+Depois de anexar o EA, o painel compacto exibirá diretamente no gráfico:
 
 - **Status:** `MONITORANDO` (verde);
-- **Limite Perda:** valor atual monitorado (ex: `-500.00 BRL`);
-- **Perda Janela:** resultado financeiro da janela atual ($W$);
-- **Total do Dia:** resultado consolidado diário ($D$);
-- **Botões:** `[ CONFIGURAR LIMITE ]` e `[ DETALHES ]`.
+- **Resultado:** resultado consolidado atual do dia (ex: `+0.00 BRL`);
+- **Limite Atual:** valor máximo monitorado (ex: `-500.00 BRL`);
+- **Proteção:** `Vigilante` (ou contagem regressiva durante bloqueio);
+- **Operações:** contagem de posições abertas e ordens pendentes;
+- **Botões:** `[ CONFIGURAR ]` e `[ DETALHES ]`.
 
-Se precisar da visualização técnica completa com todos os dados de auditoria, clique em **[ DETALHES ]** (e volte a qualquer momento clicando em **[ PAINEL COMPACTO ]**).
+Se precisar da visualização técnica completa de engenharia com todas as variáveis matemáticas e de persistência, clique em **[ DETALHES ]** (e volte a qualquer momento clicando em **[ PAINEL COMPACTO ]**).
 
 ## 5. Como alterar o limite de perda diretamente pelo gráfico
 
 Você não precisa abrir a janela de propriedades do robô nem recompilar:
 
-1. No painel compacto, clique em **[ CONFIGURAR LIMITE ]**.
-2. Digite o novo valor (ex: `750.00` ou `R$ 750,00`). O sistema aceita vírgulas, pontos e prefixos de moeda.
-3. Clique em **[ AVANÇAR ]**.
-4. Confira os valores e clique em **[ SIM, APLICAR ]**.
+1. No painel compacto, clique em **[ CONFIGURAR ]**.
+2. Na janela dedicada, digite o novo valor no campo largo (ex: `750.00` ou `750,50`). O sistema aceita vírgulas, pontos e prefixos de moeda.
+3. Clique em **[ AVANÇAR ]** (ou pressione Enter).
+4. Confira os valores na tela de confirmação e clique em **[ CONFIRMAR ]** (ou **[ VOLTAR ]** para corrigir).
 
-Pronto! O novo limite passa a valer imediatamente e fica gravado para a sua conta mesmo se o terminal for reiniciado.
+Pronto! O novo limite passa a valer imediatamente e fica persistido para a sua conta mesmo se o terminal for reiniciado.
 
 > [!NOTE]
-> Se o robô estiver com a proteção ativada (`BLOQUEIO ATIVO`), a alteração de limite fica bloqueada por segurança para garantir a disciplina do operador.
+> Se o robô estiver com a proteção ativada (`PROTEÇÃO ATIVA`), a alteração de limite fica bloqueada por segurança (`[ BLOQUEADO ]`) para garantir a disciplina operacional do trader.
 
 ## 6. O que acontece quando o limite é atingido
 

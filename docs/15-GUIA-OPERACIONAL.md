@@ -122,36 +122,37 @@ Na versão `1.0.0-rc2`, o EddyTrader introduz uma interface orientada a traders,
 
 ### 6.1 Painel Compacto Trader (`EDDY_HUD_COMPACT`)
 
-O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de alto contraste, apresentando:
+O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de alto contraste, apresentando apenas informações essenciais para a rotina do operador:
 
-- **Status Operacional:**
+- **Status Operacional Humano:**
   - `MONITORANDO`: Operação normal liberada (verde esmeralda);
   - `PROTEÇÃO ACIONADA` / `FECHANDO OPERAÇÕES`: Liquidação compulsória em andamento (vermelho);
   - `PROTEÇÃO ATIVA`: Bloqueio temporal vigente com contagem regressiva (laranja âmbar);
   - `REABRINDO`: Transição formal de reabertura e estabelecimento de nova baseline (ouro);
   - `FAIL-CLOSED`: Condição de inconsistência de persistência ou perda de ownership (vermelho de alerta).
-- **Limite de Perda Efetivo:** Valor vigente na moeda da conta (ex: `-500.00 BRL`).
-- **Perda da Janela ($W$):** Resultado financeiro acumulado na janela de risco ativa ($W_n(t) = D(t) - B_n$).
-- **Total do Dia ($D$):** Resultado financeiro consolidado do dia ($R_{\text{day}} + F(t)$).
-- **Mensagem / Contagem Regressiva:** Durante o bloqueio, exibe `Bloqueio restante: hh:mm:ss`. Em operação normal, exibe a janela ativa e a baseline.
-- **Botão `[ CONFIGURAR LIMITE ]`:** Abre a janela de edição de limite diretamente sobre o gráfico.
-- **Botão `[ DETALHES ]`:** Alterna instantaneamente para o painel detalhado de auditoria de engenharia.
+- **Resultado Atual:** Resultado financeiro consolidado do dia na moeda da conta (ex: `+150.00 BRL` em verde ou `-120.00 BRL` em vermelho).
+- **Limite Atual:** Limite máximo de perda vigente (ex: `-500.00 BRL`).
+- **Proteção:** Status vigilante em operação normal ou contagem regressiva precisa durante bloqueio (`Bloqueio: hh:mm:ss`).
+- **Operações:** Posições abertas e ordens pendentes atuais (ex: `2 pos / 0 ord`).
+- **Botão `[ CONFIGURAR ]`:** Abre uma janela independente de configuração no gráfico (ou exibe `[ BLOQUEADO ]` se a proteção estiver ativa).
+- **Botão `[ DETALHES ]`:** Alterna instantaneamente para o extrato técnico detalhado de engenharia.
 
 ### 6.2 Fluxo de Alteração de Limite pelo Gráfico
 
-1. **Abertura da Modal:** O trader clica em `[ CONFIGURAR LIMITE ]`. O painel exibe o limite atual e uma caixa de texto interativa (`OBJ_EDIT`).
-2. **Entrada do Novo Valor:** O trader digita o valor desejado. O parser do EddyTrader aceita:
+1. **Abertura da Janela Independente:** O trader clica em `[ CONFIGURAR ]`. Uma janela dedicada e espaçosa se abre abaixo (ou ao lado) do HUD, mantendo o monitoramento principal visível.
+2. **Entrada do Novo Valor:** O trader clica no campo de texto largo e digita o novo limite. O campo mantém estabilidade e foco contínuo sem ser resetado pelo timer do terminal. O parser aceita:
    - Separador decimal por ponto ou vírgula (ex: `750.00` ou `750,50`);
    - Prefixos monetários comuns (ex: `R$ 750,00`, `$ 800`, `EUR 500`);
    - Espaços em branco automáticos.
-3. **Validação de Segurança:**
-   - Se o valor for $\le 0$, vazio ou texto sem dígitos, o painel exibe mensagem de erro imediata (`Valor inválido! Digite valor > 0`) e retém a alteração.
-4. **Confirmação em Dois Passos:**
-   - Ao clicar em `[ AVANÇAR ]`, o painel entra no estado de confirmação (`CONFIRMAR ALTERAÇÃO: De X para Y?`).
-   - O trader clica em `[ SIM, APLICAR ]` para efetivar ou `[ CANCELAR ]` para abortar.
-5. **Persistência e Avaliação Imediata:**
-   - O novo limite é gravado nas GlobalVariables (`EDDY_<LOGIN>_CONFIG_MAX_LOSS`);
-   - O motor executa uma avaliação imediata da FSM: caso a perda corrente já supere o novo limite ($W \le -L_{\text{novo}}$), a proteção é disparada imediatamente no mesmo instante.
+3. **Validação de Segurança e Avanço:**
+   - O trader clica em `[ AVANÇAR ]` (ou pressiona `Enter`).
+   - Se o valor for $\le 0$, vazio ou texto sem dígitos, uma mensagem clara de erro é exibida em vermelho (`Valor invalido! Digite valor > 0.`) e a alteração não prossegue.
+4. **Confirmação Explícita de Segurança:**
+   - A janela exibe os dados para conferência: limite atual, novo limite solicitado, resultado consolidado atual e o aviso de aplicação imediata.
+   - O trader clica em `[ CONFIRMAR ]` para aplicar de forma definitiva, `[ VOLTAR ]` para corrigir o valor digitado, ou `[ CANCELAR ]` para fechar sem qualquer mutação.
+5. **Persistência Transacional e Avaliação Imediata:**
+   - O novo limite é gravado nas GlobalVariables com flush e confirmação de leitura (`EDDY_<LOGIN>_CONFIG_MAX_LOSS`);
+   - O motor executa uma avaliação imediata da FSM: caso a perda corrente já supere o novo limite ($W \le -L_{\text{novo}}$), a proteção é disparada imediatamente no mesmo ciclo.
 
 ### 6.3 Salvaguardas Rígidas de Risco (Anti-Bypass)
 - **Proibição de Alteração Durante Proteção:** Se o robô estiver em `PROTECTION_TRIGGERED`, `LIQUIDATING` ou `BLOCKED`, o botão passa a exibir `[ LIMITE BLOQUEADO ]` e qualquer tentativa de alteração é sumariamente recusada pelo motor. Isso impede que o trader aumente o limite no calor do momento para tentar "furar" o bloqueio compulsório.
