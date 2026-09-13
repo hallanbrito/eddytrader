@@ -1,6 +1,6 @@
 # 15 — Guia Operacional do EddyTrader
 
-> **Versão:** 1.0.0-rc1 (Release Candidate)  
+> **Versão:** 1.0.0-rc2 (Release Candidate 2)  
 > **Status:** Homologado com Ressalvas (Pendente Validação `LIVE-01` em Conta Demo com Pregão Aberto)  
 > **Público-Alvo:** Operadores, Gestores de Risco e Administradores de Plataforma MetaTrader 5
 
@@ -78,8 +78,14 @@ Ao anexar o EA ou pressionar `F7` no gráfico, configure os parâmetros conforme
 
 ```mql5
 input group "=== Configurações de Risco ==="
-input double InpMaxLoss            = 500.0; // Perda Máxima Permitida por Janela (Moeda da Conta, > 0.0)
+input double InpMaxLoss            = 500.0; // Perda Máxima Inicial Padrão (Moeda da Conta, > 0.0)
 input int    InpBlockDurationHours = 4;     // Duração Contínua do Bloqueio (Horas, 1 a 168h)
+
+input group "=== Interface e Painel (UX) ==="
+input ENUM_EDDY_HUD_MODE InpHudMode    = EDDY_HUD_COMPACT;       // Modo Visual do Painel
+input ENUM_BASE_CORNER   InpHudCorner  = CORNER_LEFT_UPPER;      // Canto do Gráfico
+input int                InpHudOffsetX = 20;                     // Distância Horizontal (X) em Pixels
+input int                InpHudOffsetY = 30;                     // Distância Vertical (Y) em Pixels
 
 input group "=== Configurações Operacionais ==="
 input int    InpTimerIntervalMs    = 500;   // Intervalo de Varredura do Timer (Milissegundos, 50 a 5000)
@@ -88,49 +94,99 @@ input ulong  InpDeviationPoints    = 10;    // Desvio Máximo / Slippage Tolerad
 
 ### Detalhamento dos Campos
 * **`InpMaxLoss` (Default: `500.0`):**
-  * Limite monetário de perda para disparo compulsório da proteção na janela corrente.
+  * Limite monetário inicial padrão de perda para disparo compulsório da proteção na janela corrente.
   * Expressa obrigatoriamente na **moeda base da conta** (ex: BRL em contas brasileiras, USD em contas internacionais).
-  * Exemplo: configurado como `500.0`, a proteção será disparada compulsoriamente quando o resultado da janela $W_n(t) \le -500.00$.
+  * **Precedência de Configuração:** Caso o trader altere o limite diretamente pelo gráfico, o valor configurado pelo gráfico é persistido em GlobalVariables (`EDDY_<LOGIN>_CONFIG_MAX_LOSS`) e terá precedência automática sobre `InpMaxLoss` mesmo após reinicializações.
 * **`InpBlockDurationHours` (Default: `4`):**
   * Duração contínua e ininterrupta do bloqueio operacional a contar do instante do disparo ($t_{\text{unlock}} = t_{\text{trigger}} + \text{Horas} \times 3600$).
-  * Valor normativo de homologação: **4 horas**.
+  * Faixa operacional: 1 a 168 horas (padrão normativo: **4 horas**).
+* **`InpHudMode` (Default: `EDDY_HUD_COMPACT`):**
+  * Define o modo visual de exibição na tela do gráfico:
+    * `EDDY_HUD_COMPACT`: Painel interativo moderno e compacto com botões on-chart (recomendado para traders);
+    * `EDDY_HUD_DETAILED`: Painel clássico textual de auditoria técnica via `Comment()`;
+    * `EDDY_HUD_OFF`: Desativa completamente qualquer elemento visual no gráfico.
+* **`InpHudCorner` (Default: `CORNER_LEFT_UPPER`):**
+  * Canto do gráfico onde o painel visual é ancorado.
+* **`InpHudOffsetX` / `InpHudOffsetY` (Default: `20` / `30`):**
+  * Espaçamento em pixels a partir das margens do canto ancorado.
 * **`InpTimerIntervalMs` (Default: `500`):**
-  * Frequência do pulso de alta precisão via `EventSetMillisecondTimer`.
-  * Permite que o EA inspecione o avanço do relógio e o resultado da conta 2 vezes por segundo mesmo em momentos de calmaria sem ticks de cotação. Faixa operacional: 50 a 5000 ms.
+  * Frequência do pulso de alta precisão via `EventSetMillisecondTimer`. Faixa operacional: 50 a 5000 ms.
 * **`InpDeviationPoints` (Default: `10`):**
   * Tolerância de slippage/desvio em pontos enviada nas requisições compulsórias de `PositionClose`.
 
 ---
 
-## 6. Estados Operacionais da FSM e Interface Visual (HUD)
+## 6. Interface Visual do Trader (HUD) e Configuração On-Chart
 
-O EddyTrader projeta um painel informativo textual diretamente no canto superior esquerdo do gráfico via função `Comment()`:
+Na versão `1.0.0-rc2`, o EddyTrader introduz uma interface orientada a traders, dispensando o conhecimento de parâmetros técnicos e termos internos de engenharia.
+
+### 6.1 Painel Compacto Trader (`EDDY_HUD_COMPACT`)
+
+O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de alto contraste, apresentando:
+
+- **Status Operacional:**
+  - `MONITORANDO`: Operação normal liberada (verde esmeralda);
+  - `PROTEÇÃO ACIONADA` / `FECHANDO OPERAÇÕES`: Liquidação compulsória em andamento (vermelho);
+  - `PROTEÇÃO ATIVA`: Bloqueio temporal vigente com contagem regressiva (laranja âmbar);
+  - `REABRINDO`: Transição formal de reabertura e estabelecimento de nova baseline (ouro);
+  - `FAIL-CLOSED`: Condição de inconsistência de persistência ou perda de ownership (vermelho de alerta).
+- **Limite de Perda Efetivo:** Valor vigente na moeda da conta (ex: `-500.00 BRL`).
+- **Perda da Janela ($W$):** Resultado financeiro acumulado na janela de risco ativa ($W_n(t) = D(t) - B_n$).
+- **Total do Dia ($D$):** Resultado financeiro consolidado do dia ($R_{\text{day}} + F(t)$).
+- **Mensagem / Contagem Regressiva:** Durante o bloqueio, exibe `Bloqueio restante: hh:mm:ss`. Em operação normal, exibe a janela ativa e a baseline.
+- **Botão `[ CONFIGURAR LIMITE ]`:** Abre a janela de edição de limite diretamente sobre o gráfico.
+- **Botão `[ DETALHES ]`:** Alterna instantaneamente para o painel detalhado de auditoria de engenharia.
+
+### 6.2 Fluxo de Alteração de Limite pelo Gráfico
+
+1. **Abertura da Modal:** O trader clica em `[ CONFIGURAR LIMITE ]`. O painel exibe o limite atual e uma caixa de texto interativa (`OBJ_EDIT`).
+2. **Entrada do Novo Valor:** O trader digita o valor desejado. O parser do EddyTrader aceita:
+   - Separador decimal por ponto ou vírgula (ex: `750.00` ou `750,50`);
+   - Prefixos monetários comuns (ex: `R$ 750,00`, `$ 800`, `EUR 500`);
+   - Espaços em branco automáticos.
+3. **Validação de Segurança:**
+   - Se o valor for $\le 0$, vazio ou texto sem dígitos, o painel exibe mensagem de erro imediata (`Valor inválido! Digite valor > 0`) e retém a alteração.
+4. **Confirmação em Dois Passos:**
+   - Ao clicar em `[ AVANÇAR ]`, o painel entra no estado de confirmação (`CONFIRMAR ALTERAÇÃO: De X para Y?`).
+   - O trader clica em `[ SIM, APLICAR ]` para efetivar ou `[ CANCELAR ]` para abortar.
+5. **Persistência e Avaliação Imediata:**
+   - O novo limite é gravado nas GlobalVariables (`EDDY_<LOGIN>_CONFIG_MAX_LOSS`);
+   - O motor executa uma avaliação imediata da FSM: caso a perda corrente já supere o novo limite ($W \le -L_{\text{novo}}$), a proteção é disparada imediatamente no mesmo instante.
+
+### 6.3 Salvaguardas Rígidas de Risco (Anti-Bypass)
+- **Proibição de Alteração Durante Proteção:** Se o robô estiver em `PROTECTION_TRIGGERED`, `LIQUIDATING` ou `BLOCKED`, o botão passa a exibir `[ LIMITE BLOQUEADO ]` e qualquer tentativa de alteração é sumariamente recusada pelo motor. Isso impede que o trader aumente o limite no calor do momento para tentar "furar" o bloqueio compulsório.
+- **Preservação de Invariantes:** A alteração de limite nunca altera o timestamp de desbloqueio $t_{\text{unlock}}$ ou o ID do evento de bloqueio em andamento.
+
+### 6.4 Painel Detalhado de Engenharia (`EDDY_HUD_DETAILED`)
+
+Para fins de auditoria, certificação ou conferência técnica de variáveis internas, o operador pode clicar em `[ DETALHES ]`, exibindo o extrato completo:
 
 ```text
 ====================================================
- EddyTrader v1.0.0-rc1 - Release Candidate 1
+ EddyTrader v1.0.0-rc2 - Release Candidate 2
  Gerenciador de Risco Operacional e Limite de Perda Diária (MQL5 Nativo)
 ====================================================
  Conta: 6272676 | Modo: DEMO | Servidor: ActivTradesCorp-Server
- Instância: #1788220800502530 (Owner: SIM)
- Horário Servidor: 2026.09.13 14:35:10
+ Instancia: #1788220800502530 (Owner: SIM)
+ Horario Servidor: 2026.09.13 14:35:10
 ----------------------------------------------------
- Estado FSM: MONITORING
+ Estado FSM: MONITORING (MONITORANDO)
  Janela Ativa: J0 | Baseline (Bn): 0.00
- Perda Máxima Permitida (L): -500.00
+ Perda Maxima Efetiva (L): -500.00
 ----------------------------------------------------
  R_day (Realizado Hoje):    -120.00 USD
- F(t)  (Flutuante Líquido):  -85.50 USD
+ F(t)  (Flutuante Liquido):  -85.50 USD
  D(t)  (Consolidado Hoje):  -205.50 USD
  W_n(t)(Resultado Janela):  -205.50 USD
 ----------------------------------------------------
- Status de Proteção: NOMINAL / VIGILANTE
+ Status de Protecao: NOMINAL / VIGILANTE
  ID do Evento: 0
- Informação de Bloqueio: Nenhum bloqueio ativo
- Posições Abertas: 2 | Ordens Pendentes: 0
- Negociação Autorizada: SIM (NOMINAL)
+ Informacao de Bloqueio: Nenhum bloqueio ativo
+ Posicoes Abertas: 2 | Ordens Pendentes: 0
+ Negociacao Autorizada: SIM (NOMINAL)
 ====================================================
 ```
+Um botão `[ PAINEL COMPACTO ]` é exibido no topo para retornar ao modo compacto com um único clique.
 
 ### Significado dos Estados da Máquina de Estados (FSM)
 1. **`INIT` (Inicialização / Estado Transitório):**

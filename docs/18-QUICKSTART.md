@@ -2,7 +2,7 @@
 
 Este guia é para quem quer **instalar e usar**, sem precisar ler a documentação técnica do projeto.
 
-> **Versão atual:** `1.0.0-rc1`  
+> **Versão atual:** `1.0.0-rc2`  
 > **Status:** Release Candidate — use primeiro em conta Demo.
 
 ## 1. Baixe o EddyTrader
@@ -37,6 +37,7 @@ Configuração inicial sugerida:
 ```text
 InpMaxLoss            = 500.0
 InpBlockDurationHours = 4
+InpHudMode            = EDDY_HUD_COMPACT
 InpTimerIntervalMs    = 500
 InpDeviationPoints    = 10
 ```
@@ -49,30 +50,33 @@ Exemplo:
 - `InpMaxLoss = 500`;
 - proteção dispara quando a perda da janela atingir **-R$ 500 ou pior**.
 
-## 4. Confira o HUD
+## 4. Confira o Painel no Gráfico (HUD)
 
-Depois de anexar o EA, procure no gráfico:
+Depois de anexar o EA, o painel compacto exibirá:
 
-- versão do EddyTrader;
-- estado FSM;
-- janela operacional;
-- MaxLoss;
-- resultado realizado;
-- resultado flutuante;
-- resultado da janela;
-- quantidade de posições e ordens;
-- status de proteção.
+- **Status:** `MONITORANDO` (verde);
+- **Limite Perda:** valor atual monitorado (ex: `-500.00 BRL`);
+- **Perda Janela:** resultado financeiro da janela atual ($W$);
+- **Total do Dia:** resultado consolidado diário ($D$);
+- **Botões:** `[ CONFIGURAR LIMITE ]` e `[ DETALHES ]`.
 
-Se aparecer:
+Se precisar da visualização técnica completa com todos os dados de auditoria, clique em **[ DETALHES ]** (e volte a qualquer momento clicando em **[ PAINEL COMPACTO ]**).
 
-```text
-Estado FSM: MONITORING
-Negociação autorizada: SIM
-```
+## 5. Como alterar o limite de perda diretamente pelo gráfico
 
-o monitoramento nominal está ativo.
+Você não precisa abrir a janela de propriedades do robô nem recompilar:
 
-## 5. O que acontece quando o limite é atingido
+1. No painel compacto, clique em **[ CONFIGURAR LIMITE ]**.
+2. Digite o novo valor (ex: `750.00` ou `R$ 750,00`). O sistema aceita vírgulas, pontos e prefixos de moeda.
+3. Clique em **[ AVANÇAR ]**.
+4. Confira os valores e clique em **[ SIM, APLICAR ]**.
+
+Pronto! O novo limite passa a valer imediatamente e fica gravado para a sua conta mesmo se o terminal for reiniciado.
+
+> [!NOTE]
+> Se o robô estiver com a proteção ativada (`BLOQUEIO ATIVO`), a alteração de limite fica bloqueada por segurança para garantir a disciplina do operador.
+
+## 6. O que acontece quando o limite é atingido
 
 O EddyTrader:
 
@@ -83,7 +87,7 @@ O EddyTrader:
 5. neutraliza reativamente novas operações abertas durante o bloqueio;
 6. após o prazo, cria uma nova baseline e retorna ao monitoramento quando for seguro.
 
-## 6. Atenções importantes
+## 7. Atenções importantes
 
 - Use **uma única instância por conta**.
 - Não feche o MT5 se quiser manter proteção ativa.
@@ -93,8 +97,8 @@ O EddyTrader:
 - O bloqueio de ordens manuais é reativo, não preventivo.
 - Teste primeiro em **Demo**.
 
-## 7. Precisa de mais detalhes?
+## 8. Precisa de mais detalhes?
 
 - [Guia Operacional completo](15-GUIA-OPERACIONAL.md)
-- [Release Notes](17-RELEASE-NOTES-1.0.0-rc1.md)
+- [Release Notes 1.0.0-rc2](20-RELEASE-NOTES-1.0.0-rc2.md)
 - [Abrir uma Issue](https://github.com/hallanbrito/eddytrader/issues)

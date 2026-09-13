@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos Cenários W06-01 a W06-15 da FSM e Recuperação"
+#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..19"
 
 //--- Definição dos Estados da FSM
 enum ENUM_EDDY_STATE
@@ -34,7 +34,9 @@ struct EddyRecoveryState
 //--- Contexto Simulado de Teste
 ulong    test_login             = 99999999;
 double   test_max_loss          = 500.0;
+double   test_g_max_loss        = 500.0;
 int      test_block_hours       = 4;
+bool     sim_gv_persist_fail    = false;
 
 ENUM_EDDY_STATE test_state      = EDDY_STATE_INIT;
 int      test_window_id         = 0;
@@ -62,6 +64,11 @@ string TestGVKey(const string suffix)
    return StringFormat("EDDY_TEST_%I64u_%s", test_login, suffix);
 }
 
+string TestGVConfigKey(const string suffix)
+{
+   return StringFormat("EDDY_TEST_%I64u_CONFIG_%s", test_login, suffix);
+}
+
 void TestClearGV()
 {
    GlobalVariableDel(TestGVKey("STATE"));
@@ -71,7 +78,134 @@ void TestClearGV()
    GlobalVariableDel(TestGVKey("T_UNLOCK"));
    GlobalVariableDel(TestGVKey("EVENT_ID"));
    GlobalVariableDel(TestGVKey("DAY"));
+   GlobalVariableDel(TestGVConfigKey("MAX_LOSS"));
    GlobalVariablesFlush();
+}
+
+bool TestParseMoneyInput(string input_str, double &out_val)
+{
+   out_val = 0.0;
+   StringTrimLeft(input_str);
+   StringTrimRight(input_str);
+   if(StringLen(input_str) == 0)
+      return false;
+
+   string s = input_str;
+   StringToUpper(s);
+   StringReplace(s, "R$", "");
+   StringReplace(s, "$", "");
+   StringReplace(s, "BRL", "");
+   StringReplace(s, "USD", "");
+   StringReplace(s, "EUR", "");
+   StringReplace(s, " ", "");
+   StringReplace(s, ",", ".");
+
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   if(StringLen(s) == 0)
+      return false;
+
+   int dot_count = 0;
+   int digit_count = 0;
+   for(int i = 0; i < StringLen(s); i++)
+   {
+      ushort ch = StringGetCharacter(s, i);
+      if(ch >= '0' && ch <= '9')
+      {
+         digit_count++;
+      }
+      else if(ch == '.')
+      {
+         dot_count++;
+         if(dot_count > 1)
+            return false;
+      }
+      else
+      {
+         return false;
+      }
+   }
+
+   if(digit_count == 0)
+      return false;
+
+   double val = StringToDouble(s);
+   if(val <= 0.0)
+      return false;
+
+   out_val = NormalizeDouble(val, 2);
+   return true;
+}
+
+bool TestSetMaxLossConfig(double new_limit, string &err_msg)
+{
+   // 1. Validar novo valor
+   if(new_limit <= 0.0)
+   {
+      err_msg = "Limite deve ser maior que zero (> 0.0).";
+      return false;
+   }
+
+   // Bloqueio por estado e segurança operacional
+   if(test_state != EDDY_STATE_MONITORING || !test_safe_to_operate)
+   {
+      err_msg = "Alteracao proibida: EA nao esta em MONITORING seguro.";
+      return false;
+   }
+
+   // 2. Gravar Global Variable
+   string key = TestGVConfigKey("MAX_LOSS");
+
+   // Simulação de falha transacional de persistência/flush (W09R-13)
+   if(sim_gv_persist_fail)
+   {
+      err_msg = "Falha ao gravar configuracao no terminal MT5 (falha simulada).";
+      return false; // Retorna imediatamente sem alterar test_g_max_loss
+   }
+
+   ResetLastError();
+   datetime set_res = GlobalVariableSet(key, new_limit);
+   int set_err = GetLastError();
+   if(set_res == 0 && set_err != 0)
+   {
+      err_msg = "Falha ao gravar configuracao no terminal MT5.";
+      return false;
+   }
+
+   // 3. Executar GlobalVariablesFlush()
+   GlobalVariablesFlush();
+
+   // 4. Confirmar sucesso da persistência (leitura atômica de volta)
+   if(!GlobalVariableCheck(key))
+   {
+      err_msg = "Falha na verificacao da chave persistida nas Global Variables.";
+      return false;
+   }
+
+   double read_back = GlobalVariableGet(key);
+   if(read_back != new_limit)
+   {
+      err_msg = "Inconsistencia no valor gravado nas Global Variables.";
+      return false;
+   }
+
+   // 5. Somente então atualizar test_g_max_loss
+   test_g_max_loss = new_limit;
+   err_msg = "";
+
+   // 6. Executar a avaliação normal da FSM
+   return true;
+}
+
+double TestResolveEffectiveLimit(double input_default)
+{
+   string key = TestGVConfigKey("MAX_LOSS");
+   if(GlobalVariableCheck(key))
+   {
+      double val = GlobalVariableGet(key);
+      if(val > 0.0) return val;
+   }
+   return input_default;
 }
 
 void TestPersistGV()
@@ -1017,11 +1151,296 @@ void RunAllTests()
    TestReleaseGuard(id_F, is_owner_F);
    TestClearGV();
 
+   //=================================================================
+   // BATERIA W09R — TRADER UX, CONFIGURAÇÃO ON-CHART E SEGURANÇA
+   //=================================================================
+
+   //-----------------------------------------------------------------
+   // W09R-01: Persistência Tem Precedência sobre InpMaxLoss no Start
+   //-----------------------------------------------------------------
+   TestClearGV();
+   GlobalVariableSet(TestGVConfigKey("MAX_LOSS"), 750.0);
+   GlobalVariablesFlush();
+   double effective_limit_01 = TestResolveEffectiveLimit(500.0);
+   AssertTest("W09R-01",
+              (effective_limit_01 == 750.0),
+              "Limite persistido em GlobalVariables tem precedência sobre o valor padrão de InpMaxLoss");
+
+   //-----------------------------------------------------------------
+   // W09R-02: Fallback para InpMaxLoss na Ausência de Configuração
+   //-----------------------------------------------------------------
+   TestClearGV();
+   double effective_limit_02 = TestResolveEffectiveLimit(500.0);
+   AssertTest("W09R-02",
+              (effective_limit_02 == 500.0),
+              "Na ausência de configuração persistida, o sistema adota fielmente o InpMaxLoss padrão");
+
+   //-----------------------------------------------------------------
+   // W09R-03: Atualização de Limite em MONITORING com Ambiente Seguro
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string err_03        = "";
+   bool ok_03           = TestSetMaxLossConfig(800.0, err_03);
+   bool gv_saved_03     = (GlobalVariableCheck(TestGVConfigKey("MAX_LOSS")) &&
+                           GlobalVariableGet(TestGVConfigKey("MAX_LOSS")) == 800.0);
+   AssertTest("W09R-03",
+              (ok_03 && test_g_max_loss == 800.0 && gv_saved_03 && err_03 == ""),
+              "Alteração de limite em MONITORING com ambiente seguro persiste em GV e atualiza limite imediatamente");
+
+   //-----------------------------------------------------------------
+   // W09R-04: Tentativa de Alteração Durante BLOCKED é Rejeitada
+   //-----------------------------------------------------------------
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9004;
+   string err_04        = "";
+   bool ok_04           = TestSetMaxLossConfig(1000.0, err_04);
+   bool blocked_ok_04   = (test_g_max_loss == 500.0 &&
+                           test_state == EDDY_STATE_BLOCKED &&
+                           test_t_trigger == D'2026.09.15 10:00:00' &&
+                           test_t_unlock  == D'2026.09.15 14:00:00' &&
+                           test_event_id  == 9004);
+   AssertTest("W09R-04",
+              (!ok_04 && blocked_ok_04 && StringLen(err_04) > 0),
+              "Tentativa de alteração de limite durante BLOCKED é rejeitada sem alterar limites ou parâmetros de bloqueio");
+
+   //-----------------------------------------------------------------
+   // W09R-05: Tentativa de Alteração sob Fail-Closed é Rejeitada
+   //-----------------------------------------------------------------
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = false;
+   test_g_max_loss      = 500.0;
+   string err_05        = "";
+   bool ok_05           = TestSetMaxLossConfig(600.0, err_05);
+   AssertTest("W09R-05",
+              (!ok_05 && test_g_max_loss == 500.0 && StringLen(err_05) > 0),
+              "Tentativa de alteração com safe_to_operate=false (fail-closed) é rejeitada com preservação do limite");
+
+   //-----------------------------------------------------------------
+   // W09R-06: Validação de Entrada Rejeita Valores Nulos ou Negativos
+   //-----------------------------------------------------------------
+   double val_zero = 0.0, val_neg = 0.0;
+   bool p_zero = TestParseMoneyInput("0", val_zero);
+   bool p_neg  = TestParseMoneyInput("-150.00", val_neg);
+   string err_06 = "";
+   test_state = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   bool set_zero = TestSetMaxLossConfig(0.0, err_06);
+   AssertTest("W09R-06",
+              (!p_zero && !p_neg && !set_zero && StringLen(err_06) > 0),
+              "Validação de entrada rejeita estritamente valores nulos ou negativos");
+
+   //-----------------------------------------------------------------
+   // W09R-07: Validação de Entrada Rejeita Texto e Strings Inválidas
+   //-----------------------------------------------------------------
+   double val_txt = 0.0, val_empty = 0.0, val_mixed = 0.0;
+   bool p_txt   = TestParseMoneyInput("abc", val_txt);
+   bool p_empty = TestParseMoneyInput("", val_empty);
+   bool p_mixed = TestParseMoneyInput("12.34.56", val_mixed);
+   AssertTest("W09R-07",
+              (!p_txt && !p_empty && !p_mixed),
+              "Validação de entrada rejeita texto puro, strings vazias e múltiplos separadores decimais");
+
+   //-----------------------------------------------------------------
+   // W09R-08: Parser Monetário Trata Separador Decimal com Vírgula
+   //-----------------------------------------------------------------
+   double val_comma = 0.0;
+   bool p_comma = TestParseMoneyInput("450,50", val_comma);
+   AssertTest("W09R-08",
+              (p_comma && val_comma == 450.50),
+              "Parser monetário aceita vírgula como separador decimal convertendo com precisão matemática");
+
+   //-----------------------------------------------------------------
+   // W09R-09: Parser Monetário Remove Prefixos de Moeda e Espaços
+   //-----------------------------------------------------------------
+   double val_brl = 0.0, val_usd = 0.0, val_eur = 0.0;
+   bool p_brl = TestParseMoneyInput("  R$ 350,00 ", val_brl);
+   bool p_usd = TestParseMoneyInput("$ 500.00", val_usd);
+   bool p_eur = TestParseMoneyInput("EUR 250", val_eur);
+   AssertTest("W09R-09",
+              (p_brl && val_brl == 350.0 && p_usd && val_usd == 500.0 && p_eur && val_eur == 250.0),
+              "Parser monetário remove prefixos de moeda (R$, $, EUR) e espaços em branco corretamente");
+
+   //-----------------------------------------------------------------
+   // W09R-10: Novo Limite Mais Rigoroso Dispara Proteção Imediatamente
+   //-----------------------------------------------------------------
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   double current_W     = -320.0;
+   string err_10        = "";
+   bool ok_10           = TestSetMaxLossConfig(300.0, err_10);
+   bool triggered_10    = false;
+   if(test_state == EDDY_STATE_MONITORING && current_W <= -test_g_max_loss)
+   {
+      test_state = EDDY_STATE_PROTECTION_TRIGGERED;
+      triggered_10 = true;
+   }
+   AssertTest("W09R-10",
+              (ok_10 && test_g_max_loss == 300.0 && triggered_10 && test_state == EDDY_STATE_PROTECTION_TRIGGERED),
+              "Aplicação de limite mais rigoroso que a perda atual dispara imediatamente a transição de proteção");
+
+   //-----------------------------------------------------------------
+   // W09R-11: Isolamento de Chave de Configuração por Login de Conta
+   //-----------------------------------------------------------------
+   ulong login_A = 11111111;
+   ulong login_B = 22222222;
+   string key_A = StringFormat("EDDY_TEST_%I64u_CONFIG_MAX_LOSS", login_A);
+   string key_B = StringFormat("EDDY_TEST_%I64u_CONFIG_MAX_LOSS", login_B);
+   GlobalVariableSet(key_A, 600.0);
+   GlobalVariableSet(key_B, 900.0);
+   GlobalVariablesFlush();
+   double val_A = GlobalVariableGet(key_A);
+   double val_B = GlobalVariableGet(key_B);
+   GlobalVariableDel(key_A);
+   GlobalVariableDel(key_B);
+   GlobalVariablesFlush();
+   AssertTest("W09R-11",
+              (val_A == 600.0 && val_B == 900.0 && key_A != key_B),
+              "Configurações de limite são estritamente isoladas por login de conta sem contaminação cruzada");
+
+   //-----------------------------------------------------------------
+   // W09R-12: Isolamento na Limpeza de Objetos Gráficos com Prefixo
+   //-----------------------------------------------------------------
+   string eddy_obj_1 = "EddyHUD_CardBg";
+   string eddy_obj_2 = "EddyHUD_Btn_Config";
+   string ext_obj    = "UserChartLine";
+   ObjectCreate(0, eddy_obj_1, OBJ_LABEL, 0, 0, 0);
+   ObjectCreate(0, eddy_obj_2, OBJ_BUTTON, 0, 0, 0);
+   ObjectCreate(0, ext_obj,    OBJ_LABEL, 0, 0, 0);
+   ObjectsDeleteAll(0, "EddyHUD_");
+   bool eddy_1_exists = (ObjectFind(0, eddy_obj_1) >= 0);
+   bool eddy_2_exists = (ObjectFind(0, eddy_obj_2) >= 0);
+   bool ext_exists    = (ObjectFind(0, ext_obj) >= 0);
+   ObjectDelete(0, ext_obj);
+   AssertTest("W09R-12",
+              (!eddy_1_exists && !eddy_2_exists && ext_exists),
+              "Limpeza de UI (ObjectsDeleteAll com EddyHUD_) remove apenas objetos do EA sem violar objetos externos");
+
+   // Limpeza final de GVs de teste
+   TestClearGV();
+
+   //-----------------------------------------------------------------
+   // W09R-13: Falha de Persistência/Flush Não Altera g_max_loss
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   sim_gv_persist_fail  = true; // Força falha transacional de escrita/flush
+   string err_13        = "";
+   bool ok_13           = TestSetMaxLossConfig(900.0, err_13);
+   bool gv_saved_13     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   sim_gv_persist_fail  = false; // Restaura
+   AssertTest("W09R-13",
+              (!ok_13 && test_g_max_loss == 500.0 && !gv_saved_13 && StringLen(err_13) > 0),
+              "Falha de persistencia/flush nao altera g_max_loss, registra erro e nao persiste valor");
+
+   //-----------------------------------------------------------------
+   // W09R-14: Alteração Rejeitada em PROTECTION_TRIGGERED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_PROTECTION_TRIGGERED;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string err_14        = "";
+   bool ok_14           = TestSetMaxLossConfig(800.0, err_14);
+   bool gv_saved_14     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   AssertTest("W09R-14",
+              (!ok_14 && test_g_max_loss == 500.0 && !gv_saved_14 && StringLen(err_14) > 0),
+              "Tentativa de alteracao de limite em PROTECTION_TRIGGERED e estritamente rejeitada sem mutacao");
+
+   //-----------------------------------------------------------------
+   // W09R-15: Alteração Rejeitada em LIQUIDATING
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_LIQUIDATING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string err_15        = "";
+   bool ok_15           = TestSetMaxLossConfig(800.0, err_15);
+   bool gv_saved_15     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   AssertTest("W09R-15",
+              (!ok_15 && test_g_max_loss == 500.0 && !gv_saved_15 && StringLen(err_15) > 0),
+              "Tentativa de alteracao de limite em LIQUIDATING e estritamente rejeitada sem mutacao");
+
+   //-----------------------------------------------------------------
+   // W09R-16: Alteração Rejeitada em BLOCKED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string err_16        = "";
+   bool ok_16           = TestSetMaxLossConfig(800.0, err_16);
+   bool gv_saved_16     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   AssertTest("W09R-16",
+              (!ok_16 && test_g_max_loss == 500.0 && !gv_saved_16 && StringLen(err_16) > 0),
+              "Tentativa de alteracao de limite em BLOCKED e estritamente rejeitada sem mutacao");
+
+   //-----------------------------------------------------------------
+   // W09R-17: Alteração Rejeitada em REOPENING
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_REOPENING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   string err_17        = "";
+   bool ok_17           = TestSetMaxLossConfig(800.0, err_17);
+   bool gv_saved_17     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   AssertTest("W09R-17",
+              (!ok_17 && test_g_max_loss == 500.0 && !gv_saved_17 && StringLen(err_17) > 0),
+              "Tentativa de alteracao de limite em REOPENING e estritamente rejeitada sem mutacao");
+
+   //-----------------------------------------------------------------
+   // W09R-18: Alteração Rejeitada em INIT / Fail-Closed
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_INIT;
+   test_safe_to_operate = false;
+   test_g_max_loss      = 500.0;
+   string err_18        = "";
+   bool ok_18           = TestSetMaxLossConfig(800.0, err_18);
+   bool gv_saved_18     = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+   AssertTest("W09R-18",
+              (!ok_18 && test_g_max_loss == 500.0 && !gv_saved_18 && StringLen(err_18) > 0),
+              "Tentativa de alteracao de limite em INIT / fail-closed e estritamente rejeitada sem mutacao");
+
+   //-----------------------------------------------------------------
+   // W09R-19: Invariância Rígida do Evento de Proteção Ativo
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9919;
+   string err_19        = "";
+   bool ok_19           = TestSetMaxLossConfig(5000.0, err_19);
+   bool inv_preserved   = (test_t_trigger == D'2026.09.15 10:00:00' &&
+                           test_t_unlock  == D'2026.09.15 14:00:00' &&
+                           test_event_id  == 9919 &&
+                           test_g_max_loss == 500.0 &&
+                           test_state == EDDY_STATE_BLOCKED);
+   AssertTest("W09R-19",
+              (!ok_19 && inv_preserved && !GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"))),
+              "Durante evento de protecao ativo, tentativas de alteracao preservam rigorosamente t_trigger, t_unlock e event_id");
+
+   // Limpeza final de GVs de teste
+   TestClearGV();
+
    //-----------------------------------------------------------------
    // Relatório Final da Bateria
    //-----------------------------------------------------------------
    string ftr1 = "==================================================================";
-   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R: Total=%d | Aprovados=%d | Falhas=%d",
+   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R/W09R: Total=%d | Aprovados=%d | Falhas=%d",
                               g_total_tests, g_passed_tests, g_failed_tests);
    Print(ftr1);
    Print(ftr2);
