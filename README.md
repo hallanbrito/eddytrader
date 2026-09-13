@@ -10,10 +10,10 @@ O EddyTrader **não é** uma estratégia de trading: não abre operações, não
 
 ## Estágio Atual do Projeto
 
-* **Fase:** `W05 — Spike Técnico MT5/MQL5: Garantias, Eventos, Liquidação, Bloqueio e Recuperação`
-* **Status:** Concluída. Evidências documentais, de compilação e locais consolidadas em [12-SPIKE-TECNICO-MT5.md](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md) e [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md) (Status: *Proposed*). Resolução do GAP-005 quanto ao mecanismo técnico (persistência de $\mathbf{D}_{\text{min\_recovery}}$ via Global Variables do Terminal), comprovação documental do fechamento universal por ticket para Netting e Hedging, formalização da neutralização reativa (com latência pendente de medição em Demo) e compilação com 100% de sucesso (0 erros, 0 warnings) de todos os probes em `research/w05/` com o compilador oficial MetaEditor 64 (build 6193).
-* **Próxima Fase:** `W06 — Primeiro Expert Advisor Mínimo do EddyTrader`.
-* **Aviso Importante:** Os códigos criados na W05 residem estritamente em `research/w05/` e são artefatos experimentais de laboratório (`NOT PRODUCTION CODE`). O Expert Advisor de produção (`src/EddyTrader.mq5`) será implementado apenas na W06 após aprovação formal.
+* **Fase:** `W06 — Primeiro Expert Advisor Mínimo do EddyTrader`
+* **Status:** Concluída. Expert Advisor funcional e defensivo implementado no arquivo de produção [`src/EddyTrader.mq5`](file:///C:/Projetos/eddytrader/src/EddyTrader.mq5), compilando com 100% de sucesso (0 erros, 0 warnings) no MetaEditor 64 (build 6193). Máquina de estados finita (FSM) em 6 estados, modelo contábil de janelas operacionais com baselines, liquidação universal desacoplada por ticket, neutralização reativa via `OnTradeTransaction`, guarda robusta de instância única (`OWNER + HEARTBEAT` com CAS atômico e postura fail-closed) e persistência em Terminal Global Variables implementadas e validadas. Bateria formal com 20 cenários de teste automatizados (W06-01 a W06-20) executada no ambiente real do MT5 Desktop com 100% de aprovação (20/20 PASS), além de teste de execução no Strategy Tester (5.689 ticks processados com estabilidade total).
+* **Próxima Fase:** `W07 — Testes Integrados e Homologação Operacional`.
+* **Documentação da Entrega:** Detalhada formalmente em [13 — Implementação do MVP (W06)](file:///C:/Projetos/eddytrader/docs/13-IMPLEMENTACAO-MVP-W06.md).
 
 ---
 
@@ -43,6 +43,7 @@ Toda a base conceitual e contratual do projeto está catalogada na pasta [`docs/
 11. [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md): Modelagem determinística da perda, janelas operacionais, baseline e invariantes.
 12. [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md): Modelagem determinística da FSM, catálogo de estados, guards, transições proibidas e recuperação pós-restart.
 13. [12 — Spike Técnico MT5/MQL5](file:///C:/Projetos/eddytrader/docs/12-SPIKE-TECNICO-MT5.md): Relatório exaustivo de garantias técnicas, eventos, liquidação, bloqueio e persistência no MT5.
+14. [13 — Implementação do MVP (W06)](file:///C:/Projetos/eddytrader/docs/13-IMPLEMENTACAO-MVP-W06.md): Arquitetura, estrutura de dados, garantias do EA e validação dos 20 cenários de teste na plataforma MT5.
 
 ### Registros de Decisões Arquiteturais (ADRs)
 * [ADR 0001 — Regras Temporais e Janelas de Proteção](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)

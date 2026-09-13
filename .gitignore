@@ -1,0 +1,3 @@
+# MetaTrader 5 / MQL5 compiled binaries and execution logs
+*.ex5
+*.log
