@@ -30,7 +30,8 @@ $filesToCompile = @(
     "C:\Projetos\eddytrader\tests\probe_trade_w07.mq5",
     "C:\Projetos\eddytrader\tests\test_demo_live_w07.mq5",
     "C:\Projetos\eddytrader\tests\test_demo_trade_w07.mq5",
-    "C:\Projetos\eddytrader\tests\probe_external_ea_w10.mq5"
+    "C:\Projetos\eddytrader\tests\probe_external_ea_w10.mq5",
+    "C:\Projetos\eddytrader\tests\test_visual_w10.mq5"
 )
 
 $hasFailure = $false
@@ -81,6 +82,7 @@ if (Test-Path $expertsDir) {
     Write-Host "Copiando binários compilados (.ex5) para $expertsDir..."
     Copy-Item "C:\Projetos\eddytrader\src\EddyTrader.ex5" "$expertsDir\EddyTrader.ex5" -Force
     Copy-Item "C:\Projetos\eddytrader\tests\test_fsm_w06.ex5" "$expertsDir\test_fsm_w06.ex5" -Force
+    Copy-Item "C:\Projetos\eddytrader\tests\test_visual_w10.ex5" "$expertsDir\test_visual_w10.ex5" -Force
     Write-Host -ForegroundColor Green "[DEPLOY OK] Binários de produção e teste atualizados no terminal MT5."
 } else {
     Write-Warning "[DEPLOY WARNING] Diretório de destino do terminal não encontrado: $expertsDir"

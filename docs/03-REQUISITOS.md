@@ -1,6 +1,6 @@
 # 03 — Requisitos do Sistema
 
-Este documento formaliza todos os requisitos do **EddyTrader**, estabelecendo identificadores rastreáveis, origens contratuais, prioridades e critérios verificáveis de aceite, atualizados com as deliberações da **W02** (incluindo o esclarecimento de requisito do Product Owner sobre a duração de 4 horas do bloqueio).
+Este documento formaliza todos os requisitos do **Disciplinador Trader** (nome de projeto interno: **EddyTrader**), estabelecendo identificadores rastreáveis, origens contratuais, prioridades e critérios verificáveis de aceite, atualizados com as deliberações da **W02** (incluindo o esclarecimento de requisito do Product Owner sobre a duração de 4 horas do bloqueio).
 
 ---
 

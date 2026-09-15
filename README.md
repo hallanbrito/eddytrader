@@ -66,7 +66,7 @@ O limite é atualizado e persistido imediatamente para a sua conta, mesmo que o 
 
 ### O que ele não faz
 
-O EddyTrader **não é uma estratégia de trading**. Ele não:
+O Disciplinador Trader **não é uma estratégia de trading**. Ele não:
 
 - abre operações por conta própria;
 - gera sinais;
@@ -83,12 +83,14 @@ O EddyTrader **não é uma estratégia de trading**. Ele não:
 2. No MetaTrader 5, abra **Arquivo → Abrir Pasta de Dados**.
 3. Entre em `MQL5/Experts/`.
 4. Cole o arquivo.
-5. Se estiver usando `.mq5`, abra no MetaEditor (`F4`) e compile com `F7`.
+5. Se estiver usando `.mq5`, abra no MetaEditor (`F4`) e compile com `F7` (0 erros, 0 warnings).
 6. No MT5, atualize **Navegador → Expert Advisors**.
-7. Arraste o EddyTrader para **um único gráfico**.
+7. **Topologia recomendada:**
+   - **Gráfico A (Operação do Trader):** onde você opera manualmente (Chart Trade / One-Click Trading) ou roda seus outros robôs comerciais.
+   - **Gráfico B (Disciplinador Trader):** abra um gráfico isolado (ex: `EURUSD` ou `WIN` em M1) e anexe o **Disciplinador Trader** exclusivamente neste gráfico.
 8. Marque **Permitir Algo Trading** e ative o botão **Algo Trading** no MT5.
 
-Pronto. O gráfico exibirá o painel compacto do EddyTrader com status amigável, perda monitorada, baseline e botões interativos de configuração.
+Pronto. O gráfico exibirá o painel compacto do Disciplinador Trader com status amigável, perda monitorada, baseline, botões interativos de configuração e controle de minimizar.
 
 ➡️ Guia curto: [docs/18-QUICKSTART.md](docs/18-QUICKSTART.md)  
 ➡️ Manual completo: [docs/15-GUIA-OPERACIONAL.md](docs/15-GUIA-OPERACIONAL.md)
@@ -128,7 +130,7 @@ a proteção será acionada quando o resultado da janela atingir **-R$ 500,00 ou
 Com o EA carregado, o HUD mostra informações como:
 
 ```text
-EddyTrader v1.0.0-rc1
+Disciplinador Trader v1.0.0-rc3
 Estado FSM: MONITORING
 Janela ativa: J0
 Perda máxima: -500.00
@@ -154,10 +156,10 @@ Estados principais:
 - MetaTrader 5 Desktop 64-bit;
 - Algo Trading habilitado;
 - terminal MT5 aberto e conectado;
-- apenas uma instância do EddyTrader por conta;
+- apenas uma instância do Disciplinador Trader por conta (anexada ao Gráfico B);
 - nenhuma DLL, banco, Python, servidor ou serviço externo.
 
-O EddyTrader foi homologado tecnicamente no MetaTrader 5 build 6193.
+O Disciplinador Trader foi homologado tecnicamente no MetaTrader 5 build 6193.
 
 ---
 
@@ -165,8 +167,8 @@ O EddyTrader foi homologado tecnicamente no MetaTrader 5 build 6193.
 
 - O EA só protege enquanto o terminal MT5 estiver aberto, conectado e executando o Expert Advisor.
 - Em mercado fechado, uma liquidação pode permanecer em `LIQUIDATING` até a negociação voltar a ser possível.
-- O MT5 não fornece ao EA um bloqueio preventivo físico para cliques manuais; durante `BLOCKED`, o EddyTrader neutraliza a exposição **reativamente**.
-- A versão `1.0.0-rc1` ainda possui o gate `LIVE-01` pendente, em **Demo somente**.
+- O MT5 não fornece ao EA um bloqueio preventivo físico para cliques manuais; durante `BLOCKED`, o Disciplinador Trader neutraliza a exposição **reativamente**.
+- A versão `1.0.0-rc3` possui os gates `LIVE-01` e `COMPAT-01` pendentes de homologação em mercado aberto/multi-ativo, exclusivamente em **Demo somente**.
 
 ---
 
@@ -179,7 +181,7 @@ Regressão:       67 / 67 PASS (68 asserções formais)
 Teste Visual:    11 / 11 PASS (Automação de interface no Strategy Tester)
 W07:             Homologado com ressalva em conta Demo
 LIVE-01:         Pendente — DEMO ONLY
-COMPAT-01:       Lab Pronto (`tests/probe_external_ea_w10.mq5`) — DEMO ONLY
+COMPAT-01:       Pendente (Lab pronto: tests/probe_external_ea_w10.mq5) — DEMO ONLY
 GAP-007:         Aberto — Investigação W11 (Stop Loss Lock NÃO implementado)
 ADR 0005:        Proposed
 ```
@@ -260,4 +262,4 @@ Software de gerenciamento de risco reduz riscos operacionais, mas não elimina r
 
 ## Licença
 
-A política de licença do projeto ainda precisa ser formalizada antes de distribuição ampla. Até que um arquivo `LICENSE` seja publicado, consulte o autor antes de redistribuir ou incorporar o EddyTrader em outros produtos.
+A política de licença do projeto ainda precisa ser formalizada antes de distribuição ampla. Até que um arquivo `LICENSE` seja publicado, consulte o autor antes de redistribuir ou incorporar o Disciplinador Trader em outros produtos.

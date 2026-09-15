@@ -43,7 +43,7 @@ flowchart LR
 * **Ator Principal:** Operador.
 * **Objetivo:** Estabelecer o limite monetário diário de perda e inicializar o sistema com o tempo de bloqueio de 4 horas aprovado.
 * **Pré-condições:** Terminal MT5 em execução com gráfico aberto.
-* **Gatilho:** O operador anexa o EddyTrader a um gráfico ou abre suas propriedades (`F7`).
+* **Gatilho:** O operador anexa o Disciplinador Trader a um gráfico ou abre suas propriedades (`F7`).
 * **Fluxo Principal:**
   1. O operador visualiza os parâmetros de entrada (*Inputs*).
   2. O operador informa o valor do limite máximo de perda diária (ex: `500.00`).
@@ -60,7 +60,7 @@ flowchart LR
 
 ### UC-02 — Monitorar Resultado da Conta
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Acompanhar de forma ininterrupta o resultado realizado do dia operacional e o resultado flutuante atual da conta.
 * **Pré-condições:** EA inicializado com sucesso em estado `MONITORING`.
 * **Gatilho:** Novo tick de mercado (`OnTick`) ou temporizador de alta frequência (`OnTimer`).
@@ -80,7 +80,7 @@ flowchart LR
 
 ### UC-03 — Acionar Proteção por Perda
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Reconhecer a violação da perda máxima e disparar compulsoriamente a liquidação e o cálculo da janela de 4 horas de bloqueio.
 * **Pré-condições:** Sistema em estado `MONITORING`.
 * **Gatilho:** O resultado da janela operacional ativa atinge ou supera o limite monetário ($W_n(t) \le -L$).
@@ -103,7 +103,7 @@ flowchart LR
 
 ### UC-04 — Encerrar Exposições e Ordens
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Fechar todas as posições abertas e cancelar todas as ordens pendentes em escopo global da conta.
 * **Pré-condições:** Sistema em estado `LIQUIDATING`.
 * **Gatilho:** Disparo efetuado por [UC-03](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-03--acionar-protecao-por-perda).
@@ -122,7 +122,7 @@ flowchart LR
 
 ### UC-05 — Manter Bloqueio Operacional
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Manter a proteção ativa, impedir novas operações e gerenciar a transição temporal até a liberação após 4 horas.
 * **Pré-condições:** Conclusão da liquidação em [UC-04](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md#uc-04--encerrar-exposicoes-e-ordens).
 * **Gatilho:** Entrada no estado `BLOCKED`.
@@ -162,7 +162,7 @@ flowchart LR
 
 ### UC-07 — Liberar Operações e Iniciar Nova Janela
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Desarmar a proteção temporal após completadas as 4 horas, permitir novas negociações e iniciar uma nova janela de monitoramento intradiário.
 * **Pré-condições:** Sistema no estado `BLOCKED`.
 * **Gatilho:** O relógio oficial do servidor alcança o término do bloqueio temporal de 4 horas ($t \ge t_{\text{unlock}}$, com $t_{\text{unlock}} = t_{\text{trigger}} + 14.400\text{s}$) e todas as condições de segurança são satisfeitas no instante de reabertura ($t_{\text{reopen}} \ge t_{\text{unlock}}$).
@@ -181,7 +181,7 @@ flowchart LR
 
 ### UC-08 — Tratar Falhas e Reter Proteção
 
-* **Ator Principal:** Sistema (EddyTrader EA).
+* **Ator Principal:** Sistema (Disciplinador Trader EA).
 * **Objetivo:** Isolar erros pontuais de corretora sem abortar o EA e reter o estado de proteção enquanto houver posições não encerradas.
 * **Pré-condições:** Rejeição ou recusa da corretora ao tentar fechar posição ou cancelar ordem pendente.
 * **Gatilho:** Retorno de código de erro comercial (`retcode != TRADE_RETCODE_DONE`).

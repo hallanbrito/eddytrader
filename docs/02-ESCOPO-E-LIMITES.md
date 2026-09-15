@@ -44,9 +44,9 @@ As seguintes funcionalidades e características constituem o escopo autorizado d
 
 ## 2. Fora do Escopo (Out-of-Scope)
 
-Os seguintes itens **não pertencem** ao escopo do EddyTrader em nenhuma de suas versões planejadas inicialmente:
+Os seguintes itens **não pertencem** ao escopo do Disciplinador Trader em nenhuma de suas versões planejadas inicialmente:
 
-1. **Abertura de Operações:** O EddyTrader não abre ordens de compra ou venda no mercado.
+1. **Abertura de Operações:** O Disciplinador Trader não abre ordens de compra ou venda no mercado.
 2. **Geração de Sinais ou Análise de Mercado:** O sistema não analisa candles, indicadores, fluxo de ordens (*tape reading*), médias móveis ou notícias.
 3. **Gestão de Lucro (*Take Profit* Diário):** O sistema não possui alvos de ganho, metas diárias positivas ou travas de encerramento por lucro atingido.
 4. **Definição de Stop Loss ou Take Profit Inicial de Estratégia:** O EA não atua como estratégia de trading; não insere ordens com SL/TP calculados automaticamente para auferir lucros. *(Nota de Fronteira: A proteção monotônica passiva de Stop Loss definido pelo trader — impedindo afrouxamento ou remoção — foi catalogada sob o GAP-007 e autorizada exclusivamente como tema de Spike Técnico para a W11, permanecendo rigorosamente fora do escopo de implementação da W10)*.
