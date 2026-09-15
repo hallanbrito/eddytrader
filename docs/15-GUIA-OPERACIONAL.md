@@ -1,21 +1,23 @@
-# 15 — Guia Operacional do EddyTrader
+# 15 — Guia Operacional do Disciplinador Trader
 
-> **Versão:** 1.0.0-rc2 (Release Candidate 2)  
-> **Status:** Homologado com Ressalvas (Pendente Validação `LIVE-01` em Conta Demo com Pregão Aberto)  
+> **Identidade Pública:** Disciplinador Trader  
+> **Nome de Projeto Interno / Arquivo:** EddyTrader (`src/EddyTrader.mq5`)  
+> **Versão:** 1.0.0-rc3 (Release Candidate 3 — Preparada, Não Publicada)  
+> **Status:** Homologado em Ambiente Laboratorial e Demo com Ressalvas (Pendente Validação `LIVE-01` e `COMPAT-01`)  
 > **Público-Alvo:** Operadores, Gestores de Risco e Administradores de Plataforma MetaTrader 5
 
 ---
 
 ## 1. Visão Geral e Filosofia do Produto
 
-O **EddyTrader** é um gerenciador de risco operacional autônomo desenvolvido nativamente em **MQL5 puro** para a plataforma **MetaTrader 5 (MT5)**.
+O **Disciplinador Trader** (projeto interno **EddyTrader**) é um guardião de disciplina operacional e gerenciador de risco autônomo desenvolvido nativamente em **MQL5 puro** para a plataforma **MetaTrader 5 (MT5)**.
 
 ### Propósito Exclusivo
-Sua única atribuição é monitorar continuamente o resultado financeiro consolidado da conta e, caso a perda atinja o limite máximo diário parametrizado pelo operador, executar a liquidação compulsória imediata de todas as posições abertas, cancelar ordens pendentes e manter a conta sob bloqueio operacional contínuo por **4 horas**, reabrindo posteriormente sob uma nova baseline matemática que impede o rebloqueio indevido.
+Sua atribuição é monitorar continuamente o resultado financeiro consolidado da **CONTA INTEIRA** (*Account-Global*) e, caso a perda atinja o limite máximo diário parametrizado pelo operador, executar a liquidação compulsória imediata de todas as posições abertas na conta (qualquer símbolo ou Magic Number), cancelar todas as ordens pendentes e manter a conta sob bloqueio operacional contínuo por **4 horas**, reabrindo posteriormente sob uma nova baseline matemática ($B_n$) que impede o rebloqueio indevido.
 
-### O que o EddyTrader NÃO É (Limites Rígidos)
+### O que o Disciplinador Trader NÃO É (Limites Rígidos)
 * **Não é estratégia de trading:** não abre posições, não analisa tendências, não gera sinais operacionais e não escolhe ativos;
-* **Não define stops discricionários:** não posiciona Stop Loss individual ou Take Profit por ordem;
+* **Não define stops discricionários preditivos:** não posiciona Stop Loss individual ou Take Profit por ordem para auferir lucros; *(A proteção de SL contra afrouxamento é objeto do Spike W11 / GAP-007 e não está implementada nesta versão)*;
 * **Não busca metas de ganho:** não encerra operações por alcance de lucro financeiro (*Take Profit global*);
 * **Não utiliza dependências externas:** opera 100% no cliente MT5 sem DLLs, banco de dados externo, Python, servidores intermediários, WebRequests ou robôs de mensageria (Telegram/Discord).
 
@@ -34,7 +36,7 @@ Sua única atribuição é monitorar continuamente o resultado financeiro consol
 
 > [!IMPORTANT]
 > **Dependência de Execução Local:**  
-> Como Expert Advisor nativo, o EddyTrader somente atua enquanto o terminal MetaTrader 5 estiver aberto, conectado e com o EA carregado no gráfico. Se o computador for desligado ou o terminal encerrado, nenhuma ordem poderá ser cancelada ou neutralizada durante o período de inatividade. Ao reabrir o terminal, o sistema recupera automaticamente todo o estado persistido e reconcilia a situação da conta.
+> Como Expert Advisor nativo, o Disciplinador Trader somente atua enquanto o terminal MetaTrader 5 estiver aberto, conectado e com o EA carregado no gráfico. Se o computador for desligado ou o terminal encerrado, nenhuma ordem poderá ser cancelada ou neutralizada durante o período de inatividade. Ao reabrir o terminal, o sistema recupera automaticamente todo o estado persistido e reconcilia a situação da conta.
 
 ---
 
@@ -51,10 +53,10 @@ Sua única atribuição é monitorar continuamente o resultado financeiro consol
    * Certifique-se de que a compilação concluiu com **0 errors, 0 warnings**.
 4. **Atualização no Navegador:**
    * Na janela **Navegador** do MT5 (`Ctrl+N`), clique com o botão direito sobre **Expert Advisors** e selecione **Atualizar**.
-5. **Anexação ao Gráfico:**
-   * Abra qualquer gráfico de qualquer ativo e qualquer período gráfico (sugestão: `EURUSD` ou `WIN`, M1).
-   * Arraste o `EddyTrader` para o gráfico.
-   * **ATENÇÃO:** Anexe o EddyTrader a **apenas um único gráfico da conta**. A proteção atua sobre 100% dos ativos da conta independentemente do gráfico onde estiver anexado.
+5. **Anexação ao Gráfico e Topologia Operacional Recomendada (Gráfico A vs. Gráfico B):**
+   * **Gráfico A (Execução das Operações do Trader):** Gráfico do ativo onde o trader opera ativamente (ex: `WIN$N`, `WDO$N`, `EURUSD`, ações). Neste gráfico, o trader tem total liberdade para usar o painel nativo *Chart Trade*, boletas rápidas de *One-Click Trading* ou rodar robôs de estratégia com seus próprios Magic Numbers.
+   * **Gráfico B (Guardião Disciplinador Trader):** Abra uma segunda janela de gráfico limpa e dedicada (ex: `EURUSD` ou `WIN` em M1) e anexe o **Disciplinador Trader**.
+   * **ATENÇÃO:** O Disciplinador Trader atua com escopo **Account-Global** (RF-015): ele fiscaliza 100% dos ativos e robôs da conta a partir do Gráfico B sem poluir o Gráfico A e sem sofrer interferência de Magic Numbers. Anexe o Disciplinador a **apenas um único gráfico da conta**.
 6. **Habilitação de Negociação Algorítmica:**
    * Na aba **Comum** da janela de propriedades, marque a caixa **"Permitir Algo Trading"**.
    * No botão superior da barra de ferramentas do MT5, certifique-se de que o botão **Algo Trading** esteja com o ícone verde (ativado).
@@ -65,7 +67,7 @@ Sua única atribuição é monitorar continuamente o resultado financeiro consol
 
 Para evitar split-brain, conflitos concorrentes ou duplicação de ordens de fechamento caso o operador anexe inadvertidamente o robô em múltiplos gráficos:
 
-1. **Exclusão Mútua por Login:** O EddyTrader implementa uma guarda atômica por conta baseada no protocolo **OWNER + HEARTBEAT** via primitivas Compare-And-Swap (CAS) em Global Variables (`EDDY_<LOGIN>_OWNER`).
+1. **Exclusão Mútua por Login:** O Disciplinador Trader implementa uma guarda atômica por conta baseada no protocolo **OWNER + HEARTBEAT** via primitivas Compare-And-Swap (CAS) em Global Variables (`EDDY_<LOGIN>_OWNER`).
 2. **Rejeição Automática:** Apenas a primeira instância obtém a titularidade da conta. Qualquer segunda instância anexada em outro gráfico detecta o proprietário ativo e é sumariamente rejeitada durante o `OnInit()`, emitindo `INIT_FAILED` e descarregando sem interferir no monitoramento.
 3. **Assunção Pós-Queda (*Takeover* após 15s):** Caso a instância titular trave ou o gráfico seja fechado sem liberação limpa, após 15 segundos (`INSTANCE_LEASE_TIMEOUT_SECONDS = 15`) de ausência de batimento (*heartbeat*), uma nova instância carregada assume a propriedade da conta de forma limpa e atômica.
 4. **Contenção Fail-Closed para Zumbis:** Se uma instância anterior acordar de um travamento temporário após ter sido substituída, ela detecta a perda de posse, desarma o timer e entra imediatamente em postura `FAIL-CLOSED`, sem liquidar ativos e sem corromper as variáveis da nova instância ativa.
@@ -108,7 +110,7 @@ input ulong  InpDeviationPoints    = 10;    // Desvio Máximo / Slippage Tolerad
 * **`InpHudCorner` (Default: `CORNER_LEFT_UPPER`):**
   * Canto do gráfico onde o painel visual é ancorado.
 * **`InpHudOffsetX` / `InpHudOffsetY` (Default: `20` / `10`):**
-  * Espaçamento em pixels a partir das margens do canto ancorado. Em `CORNER_LEFT_UPPER`, o EddyTrader reserva automaticamente uma margem de segurança vertical de 80px para não colidir com o painel nativo One Click Trading (BUY/SELL) do MT5, aplicando `InpHudOffsetY` como ajuste adicional do usuário.
+  * Espaçamento em pixels a partir das margens do canto ancorado. Em `CORNER_LEFT_UPPER`, o Disciplinador Trader reserva automaticamente uma margem de segurança vertical de 80px para não colidir com o painel nativo One Click Trading (BUY/SELL) do MT5, aplicando `InpHudOffsetY` como ajuste adicional do usuário.
 * **`InpTimerIntervalMs` (Default: `500`):**
   * Frequência do pulso de alta precisão via `EventSetMillisecondTimer`. Faixa operacional: 50 a 5000 ms.
 * **`InpDeviationPoints` (Default: `10`):**
@@ -116,14 +118,17 @@ input ulong  InpDeviationPoints    = 10;    // Desvio Máximo / Slippage Tolerad
 
 ---
 
-## 6. Interface Visual do Trader (HUD) e Configuração On-Chart
+## 6. Interface Visual do Disciplinador Trader (HUD Adaptativo) e Configuração On-Chart
 
-Na versão `1.0.0-rc2`, o EddyTrader introduz uma interface orientada a traders, dispensando o conhecimento de parâmetros técnicos e termos internos de engenharia.
+Na versão `1.0.0-rc3`, o **Disciplinador Trader** consolida uma interface gráfica moderna, responsiva e adaptativa, orientada a operadores que necessitam de foco no gráfico sem abrir mão da consciência situacional do risco.
 
 ### 6.1 Painel Compacto Trader (`EDDY_HUD_COMPACT`)
 
 O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de alto contraste, apresentando apenas informações essenciais para a rotina do operador:
 
+- **Cabeçalho com Identidade e Minimizar:**
+  - Título oficial: `DISCIPLINADOR TRADER`
+  - Botão de colapso rápido: `[ — MINIMIZAR ]` no canto superior direito do painel.
 - **Status Operacional Humano:**
   - `MONITORANDO`: Operação normal liberada (verde esmeralda);
   - `PROTEÇÃO ACIONADA` / `FECHANDO OPERAÇÕES`: Liquidação compulsória em andamento (vermelho);
@@ -160,14 +165,28 @@ O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de 
 
 ### 6.4 Painel Detalhado de Engenharia (`EDDY_HUD_DETAILED`)
 
-Para fins de auditoria, certificação ou conferência técnica de variáveis internas, o operador pode clicar em `[ DETALHES ]`, exibindo um cartão gráfico nativo organizado diretamente no gráfico (sem poluição textual via `Comment()`):
+Para fins de auditoria, certificação ou conferência técnica de variáveis internas, o operador pode clicar em `[ DETALHES ]`, exibindo um cartão gráfico nativo organizado diretamente no gráfico:
 
-- **Identificação e Estado:** Título do produto, versão, modo (`DEMO` / `REAL`), estado da FSM e status humano traduzido;
+- **Cabeçalho com Minimizar:** Título `DISCIPLINADOR TRADER - DETALHES` e botão `[ — MINIMIZAR ]`;
+- **Identificação e Estado:** Modo (`DEMO` / `REAL`), estado da FSM e status humano traduzido;
 - **Janela e Limite:** Identificador da janela intradiária corrente ($J_n$), valor da baseline consolidada ($B_n$) e limite de perda efetivo ($-L$);
 - **Variáveis Matemáticas em Tempo Real:** Resultado realizado hoje ($R_{\text{day}}$), flutuante líquido ($F(t)$), consolidado do dia ($D(t)$) e resultado da janela ativa ($W_n(t)$);
 - **Segurança e Bloqueio:** ID formal do evento de proteção, contagem regressiva precisa de desbloqueio temporal e banner de alerta caso ocorra fail-closed;
 - **Inventário e Concorrência:** Total de posições e ordens pendentes, ID da instância operacional e status de ownership ativa;
-- **Botão de Retorno Garantido:** Um botão proeminente `[ ← VOLTAR AO RESUMO ]` posicionado confortavelmente na base do cartão restaura o painel compacto com 100% de confiabilidade em qualquer condição de mercado.
+- **Botão de Retorno:** Botão `[ ← VOLTAR AO RESUMO ]` restaura o painel compacto instantaneamente.
+
+### 6.5 Modo Minimizado Adaptativo (`PANEL_COLLAPSED`)
+
+Para operadores que necessitam de área máxima de gráfico limpa (ou usam telas menores):
+- **Acionamento:** Ao clicar em `[ — MINIMIZAR ]` (no modo Compacto ou Detalhado), o painel se recolhe em uma *pill* elegante e ultra-compacta ($370 \times 26$ pixels) posicionada discretamente no canto configurado.
+- **Conteúdo da Pill:**
+  - Título condensado: `DISCIPLINADOR`
+  - Status operacional resumido (ex: `MONITORANDO`, `FECHANDO...`, `REABRINDO...`)
+  - Resultado financeiro corrente e limite ($D(t)$ / $-L$)
+  - Botão de expansão: `[ + ]` no canto direito da pill.
+- **Segurança Visual em Bloqueio:** Se a proteção disparar enquanto o painel estiver minimizado, a pill transita compulsoriamente seu texto para `🔒 BLOQUEADO hh:mm:ss` em contagem regressiva, com borda e texto destacados em amarelo âmbar, garantindo que o trader nunca perca a percepção de que a conta está sob bloqueio.
+- **Preservação de Submodo:** Ao clicar em `[ + ]`, o sistema restaura com exatidão o modo expandido que o trader estava utilizando antes de minimizar (`COMPACT` ou `DETAILED`).
+- **Persistência Não-Fatal:** O estado colapsado é salvo na Global Variable `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED`. Sendo uma preferência puramente cosmética, falhas nessa chave jamais provocam interrupção do motor de risco.
 
 ### Significado dos Estados da Máquina de Estados (FSM)
 1. **`INIT` (Inicialização / Estado Transitório):**
@@ -184,7 +203,7 @@ Para fins de auditoria, certificação ou conferência técnica de variáveis in
    * Transcorridas as 4 horas ($t \ge t_{\text{unlock}}$) e satisfeitas as condições de segurança (`PositionsTotal == 0`, ordens zeradas e conexão ativa), captura a nova baseline $B_{n+1} = D(t_{\text{reopen}})$ e zera o resultado da nova janela ($W_{n+1} = 0$), conduzindo o sistema de volta a `MONITORING`.
 
 ### Distinção Normativa entre Estado FSM e Postura Fail-Closed
-A FSM do EddyTrader possui exclusivamente os **6 estados normativos** descritos acima. **Não existe um 7º estado `FAILED`.**  
+A FSM do Disciplinador Trader possui exclusivamente os **6 estados normativos** descritos acima. **Não existe um 7º estado `FAILED`.**  
 A **postura *fail-closed*** é uma condição operacional de segurança expressa pela flag `g_safe_to_operate = false`. Diante de qualquer anomalia crítica (ex: falha de escrita em `PersistState()`, ausência de baseline $B_n$ nas Global Variables em janelas intradiárias $J_{n \ge 1}$ ou indisponibilidade de timer):
 * O EA **não** cria estados espúrios nem transições não autorizadas;
 * O EA retém ou coloca o estado em `INIT` (ou preserva a contenção em `LIQUIDATING`/`BLOCKED`);
@@ -215,8 +234,8 @@ A **postura *fail-closed*** é uma condição operacional de segurança expressa
 
 ### 7.3. Bloqueio de 4 Horas e Neutralização Reativa
 * Durante o estado `BLOCKED`:
-  * O EddyTrader exibe a contagem regressiva oficial até $t_{\text{unlock}}$.
-  * **Neutralização de Intervenções Manuais:** A plataforma MetaTrader 5 nativa despacha ordens emitidas pelo operador diretamente ao servidor da corretora sem solicitar autorização prévia ao Expert Advisor. Para neutralizar qualquer tentativa de burla ou indisciplina do operador durante o bloqueio, o EddyTrader utiliza o manipulador `OnTradeTransaction`:
+  * O Disciplinador Trader exibe a contagem regressiva oficial até $t_{\text{unlock}}$.
+  * **Neutralização de Intervenções Manuais:** A plataforma MetaTrader 5 nativa despacha ordens emitidas pelo operador diretamente ao servidor da corretora sem solicitar autorização prévia ao Expert Advisor. Para neutralizar qualquer tentativa de burla ou indisciplina do operador durante o bloqueio, o Disciplinador Trader utiliza o manipulador `OnTradeTransaction`:
     * Ao detectar a execução de nova posição (`TRADE_TRANSACTION_DEAL_ADD`), emite imediatamente ordem de fechamento a mercado.
     * Ao detectar nova ordem pendente (`TRADE_TRANSACTION_ORDER_ADD`), emite cancelamento imediato.
   * **Invariante Temporal:** A detecção de intervenções manuais fecha a operação intrusa imediatamente, mas **não altera nem prorroga** o timestamp de liberação $t_{\text{unlock}}$ original.
@@ -252,7 +271,7 @@ A rotina `CheckMidnightRollover()` monitora a virada do relógio do servidor de 
 
 ## 9. Reinicialização do Terminal e Recuperação de Desastres
 
-O EddyTrader persiste seu conjunto mínimo de recuperação $\mathbf{D}_{\text{min\_recovery}}$ nas **Global Variables do Terminal MT5**, que são salvas em disco de forma síncrona (`gvars.dat`):
+O Disciplinador Trader persiste seu conjunto mínimo de recuperação $\mathbf{D}_{\text{min\_recovery}}$ nas **Global Variables do Terminal MT5**, que são salvas em disco de forma síncrona (`gvars.dat`):
 
 * Chaves persistidas por login: `STATE`, `WINDOW_ID`, `BASELINE`, `T_TRIGGER`, `T_UNLOCK`, `EVENT_ID`, `DAY`, `INSTANCE_OWNER` e `HEARTBEAT`.
 
@@ -272,7 +291,7 @@ O EddyTrader persiste seu conjunto mínimo de recuperação $\mathbf{D}_{\text{m
 
 Caso a proteção seja acionada no fechamento do pregão ou para ativos com negociação suspensa:
 * A API MQL5 retornará retcodes de erro como `10018` (`TRADE_RETCODE_MARKET_CLOSED`).
-* O EddyTrader não desiste e não avança precipitadamente para `BLOCKED`: ele permanece retido no estado `LIQUIDATING`.
+* O Disciplinador Trader não desiste e não avança precipitadamente para `BLOCKED`: ele permanece retido no estado `LIQUIDATING`.
 * As retentativas ocorrem a cada pulso do timer (500 ms).
 * **Prevenção de Log Flood:** Durante períodos prolongados de mercado fechado, o sistema suprime mensagens repetitivas no Journal, emitindo logs de diagnóstico em intervalos espaçados (a cada 5 segundos) para não inflar desnecessariamente os arquivos de log do MT5.
 * O cronômetro de 4 horas corre a partir do $t_{\text{trigger}}$ original, assegurando que o tempo não seja penalizado indevidamente.
@@ -282,10 +301,10 @@ Caso a proteção seja acionada no fechamento do pregão ou para ativos com nego
 ## 11. Efeitos da Remoção do Expert Advisor
 
 > [!WARNING]
-> **Atenção:** Se o operador descarregar o EddyTrader do gráfico (clicando com botão direito no gráfico -> *Expert Advisors* -> *Remover*):
+> **Atenção:** Se o operador descarregar o Disciplinador Trader do gráfico (clicando com botão direito no gráfico -> *Expert Advisors* -> *Remover*):
 > * O monitoramento e a neutralização física de ordens **cessam imediatamente**.
 > * O estado persistido da conta permanece gravado em disco no terminal.
-> * Ao reinserir o EddyTrader em qualquer gráfico da mesma conta, o robô carrega o estado persistido e restabelece a fiscalização no ponto exato em que estava.
+> * Ao reinserir o Disciplinador Trader em qualquer gráfico da mesma conta, o robô carrega o estado persistido e restabelece a fiscalização no ponto exato em que estava.
 > * Não remova o EA durante a vigência do bloqueio de 4 horas caso deseje preservar a disciplina operacional.
 
 ---
@@ -304,9 +323,9 @@ Caso a proteção seja acionada no fechamento do pregão ou para ativos com nego
    * O MT5 desktop não permite impedir o clique físico do usuário no botão de compra/venda antes que a ordem seja enviada.
    * Ordens manuais abertas durante o bloqueio chegam a ser registradas e são neutralizadas pelo EA milissegundos após a confirmação transacional (`OnTradeTransaction`), podendo incorrer no spread do momento.
 3. **Recomendação Mandatória:**
-   * **Sempre valide o EddyTrader em Conta Demo** antes de utilizá-lo em Conta Real, familiarizando-se com o comportamento visual do HUD e a disciplina temporal das 4 horas.
+   * **Sempre valide o Disciplinador Trader em Conta Demo** antes de utilizá-lo em Conta Real, familiarizando-se com o comportamento visual do HUD e a disciplina temporal das 4 horas.
 4. **Isenção de Responsabilidade:**
-   * O EddyTrader é uma ferramenta auxiliar de mitigação de risco e disciplina comportamental. O desenvolvedor e o software não assumem responsabilidade por perdas financeiras resultantes de falhas de hardware, oscilações severas de liquidez, indisponibilidade de internet, encerramento forçado do MT5 ou condutas operacionais do usuário.
+   * O Disciplinador Trader é uma ferramenta auxiliar de mitigação de risco e disciplina comportamental. O desenvolvedor e o software não assumem responsabilidade por perdas financeiras resultantes de falhas de hardware, oscilações severas de liquidez, indisponibilidade de internet, encerramento forçado do MT5 ou condutas operacionais do usuário.
 
 ---
 
@@ -325,7 +344,7 @@ Caso a proteção seja acionada no fechamento do pregão ou para ativos com nego
 
 ## 14. Procedimento Administrativo de Reset de Estado
 
-O EddyTrader **nunca reseta ou apaga seu estado persistido automaticamente** em recargas de gráfico ou encerramentos normais.
+O Disciplinador Trader **nunca reseta ou apaga seu estado persistido automaticamente** em recargas de gráfico ou encerramentos normais.
 
 Caso um administrador precise realizar a limpeza manual das variáveis da conta (por exemplo, após testes de laboratório em Conta Demo):
 1. Pressione a tecla `F3` no MetaTrader 5 para abrir a janela de **Variáveis Globais do Terminal**.

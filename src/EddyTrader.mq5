@@ -6,13 +6,13 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "EddyTrader 1.0.0-rc2 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
+#property description "Disciplinador Trader 1.0.0-rc3 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
 #property strict
 
 //--- Definições Formais do Produto e Versão
-#define EDDY_PRODUCT_NAME "EddyTrader"
-#define EDDY_VERSION      "1.0.0-rc2"
-#define EDDY_PURPOSE      "Gerenciador de Risco Operacional e Limite de Perda Diária (MQL5 Nativo)"
+#define EDDY_PRODUCT_NAME "Disciplinador Trader"
+#define EDDY_VERSION      "1.0.0-rc3"
+#define EDDY_PURPOSE      "Guardião de Disciplina Operacional e Limite de Perda Diária (MQL5 Nativo)"
 
 //--- Definições de Interface Gráfica (HUD)
 #define EDDY_UI_PREFIX "EddyHUD_"
@@ -22,6 +22,12 @@ enum ENUM_EDDY_HUD_MODE
    EDDY_HUD_COMPACT   = 0, // Painel Compacto Trader (Interativo, no Gráfico)
    EDDY_HUD_DETAILED  = 1, // Painel Técnico Detalhado (Auditoria / Engenharia)
    EDDY_HUD_OFF       = 2  // HUD Desativado (Sem elementos no gráfico)
+};
+
+enum ENUM_DISCIPLINADOR_PANEL_STATE
+{
+   PANEL_EXPANDED  = 0, // HUD Aberto (Compacto ou Detalhado)
+   PANEL_COLLAPSED = 1  // HUD Minimizado (Faixa Discreta / Pílula no Gráfico)
 };
 
 enum ENUM_CONFIG_UI_STATE
@@ -90,13 +96,15 @@ datetime             g_day_start              = 0;
 bool                 g_safe_to_operate        = false;
 
 // Estado mutável do limite de perda e painel UX
-double               g_max_loss               = 500.0;
-ENUM_EDDY_HUD_MODE   g_hud_mode               = EDDY_HUD_COMPACT;
-ENUM_CONFIG_UI_STATE g_config_ui_state        = UI_STATE_IDLE;
-double               g_pending_max_loss       = 0.0;
-string               g_config_feedback_msg    = "";
-datetime             g_config_feedback_expiry = 0;
-string               g_config_error_msg       = "";
+double                         g_max_loss               = 500.0;
+ENUM_EDDY_HUD_MODE             g_hud_mode               = EDDY_HUD_COMPACT;
+ENUM_EDDY_HUD_MODE             g_last_expanded_hud_mode = EDDY_HUD_COMPACT;
+ENUM_DISCIPLINADOR_PANEL_STATE g_panel_state            = PANEL_EXPANDED;
+ENUM_CONFIG_UI_STATE           g_config_ui_state        = UI_STATE_IDLE;
+double                         g_pending_max_loss       = 0.0;
+string                         g_config_feedback_msg    = "";
+datetime                       g_config_feedback_expiry = 0;
+string                         g_config_error_msg       = "";
 
 ulong                g_account_login          = 0;
 ulong                g_instance_id            = 0;
@@ -834,21 +842,37 @@ void UI_DeleteDetailed()
    ChartRedraw(0);
 }
 
+void UI_DeleteCollapsed()
+{
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX + "Min_");
+   ChartRedraw(0);
+}
+
+void SetPanelState(ENUM_DISCIPLINADOR_PANEL_STATE new_state)
+{
+   g_panel_state = new_state;
+   string key = GVConfigKey("PANEL_COLLAPSED");
+   ResetLastError();
+   GlobalVariableSet(key, (new_state == PANEL_COLLAPSED) ? 1.0 : 0.0);
+   GlobalVariablesFlush();
+   // Nota: falha na gravação desta preferência visual NÃO coloca o motor em fail-closed.
+}
+
 //+------------------------------------------------------------------+
 //| Janela Separada de Configuração de Limite de Perda               |
 //+------------------------------------------------------------------+
 void GetDialogPosition(int &dlg_x, int &dlg_y)
 {
-   // Dimensões do HUD: W = 260, H = 165
+   // Dimensões do HUD Compacto: W = 260, H = 192
    // Dimensões do Diálogo: W = 280, H = 205
    long chart_h = ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
-   int needed_h = GetHudOriginY() + 165 + 215 + 20;
+   int needed_h = GetHudOriginY() + 192 + 215 + 20;
 
    // Se houver espaço vertical suficiente, posiciona abaixo do HUD
    if(chart_h <= 0 || chart_h >= needed_h)
    {
       dlg_x = 0;           // Relativo a GetHudOriginX()
-      dlg_y = 175;         // Relativo a GetHudOriginY() (logo abaixo do HUD)
+      dlg_y = 202;         // Relativo a GetHudOriginY() (logo abaixo do HUD)
    }
    else
    {
@@ -975,6 +999,90 @@ void UI_CloseConfigDialog()
 //+------------------------------------------------------------------+
 //| Renderizadores dos Modos Visuais de Interface                    |
 //+------------------------------------------------------------------+
+void RenderCollapsedHUD()
+{
+   Comment("");
+   UI_CloseConfigDialog();
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Hud_CardBg") >= 0) UI_DeleteHUD();
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Det_Bg") >= 0)     UI_DeleteDetailed();
+
+   datetime t_now = GetServerTimeSafe();
+   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
+   double F       = CalculateFloatingResult();
+   double D       = R_day + F;
+   string curr    = AccountInfoString(ACCOUNT_CURRENCY);
+
+   color bg_clr     = C'20,24,33';
+   color border_clr = C'40,48,65';
+   string status_txt = "● ATIVO";
+   color  status_clr = C'46,204,113';
+
+   switch(g_current_state)
+   {
+      case EDDY_STATE_MONITORING:
+         status_txt = "● ATIVO";
+         status_clr = C'46,204,113';
+         border_clr = C'40,48,65';
+         break;
+
+      case EDDY_STATE_PROTECTION_TRIGGERED:
+      case EDDY_STATE_LIQUIDATING:
+         status_txt = "🔒 LIQUIDANDO";
+         status_clr = C'231,76,60';
+         border_clr = C'231,76,60';
+         break;
+
+      case EDDY_STATE_BLOCKED:
+      {
+         long rem_sec = (long)(g_t_unlock - t_now);
+         if(rem_sec < 0) rem_sec = 0;
+         int h = (int)(rem_sec / 3600);
+         int m = (int)((rem_sec % 3600) / 60);
+         int s = (int)(rem_sec % 60);
+         status_txt = StringFormat("🔒 BLOQUEADO %02d:%02d:%02d", h, m, s);
+         status_clr = C'243,156,18';
+         border_clr = C'243,156,18';
+         break;
+      }
+
+      case EDDY_STATE_REOPENING:
+         status_txt = "● REABRINDO";
+         status_clr = clrGold;
+         border_clr = clrGold;
+         break;
+
+      default:
+         status_txt = "● INICIANDO";
+         status_clr = clrGold;
+         border_clr = C'40,48,65';
+         break;
+   }
+
+   if(!g_is_owner || !g_safe_to_operate)
+   {
+      status_txt = "⚠️ FAIL-CLOSED";
+      status_clr = clrRed;
+      border_clr = clrRed;
+   }
+
+   // 1. Cartão Pílula Minimizada (W=370, H=26)
+   UI_SetRect(EDDY_UI_PREFIX + "Min_Bg", 0, 0, 370, 26, bg_clr, border_clr);
+
+   // 2. Identidade & Status
+   UI_SetLabel(EDDY_UI_PREFIX + "Min_Title", 8, 5, "DISCIPLINADOR", C'0,180,216', 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Min_Status", 95, 5, status_txt, status_clr, 8, true);
+
+   // 3. Resultado & Limite
+   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+   string finance_txt = StringFormat("%+.2f / -%.2f %s", D, g_max_loss, curr);
+   UI_SetLabel(EDDY_UI_PREFIX + "Min_Finance", 220, 5, finance_txt, res_clr, 8);
+
+   // 4. Botão Maximizar [ + ]
+   UI_SetButton(EDDY_UI_PREFIX + "Min_Btn_Expand", 336, 2, 28, 22, "[ + ]", C'0,122,204', clrWhite, 8, true);
+
+   ChartRedraw(0);
+}
+
 void RenderCompactHUD()
 {
    Comment(""); // Mantém área de comentário limpa no modo compacto
@@ -988,10 +1096,14 @@ void RenderCompactHUD()
       }
    }
 
-   // Limpa resíduo do painel detalhado se estiver transitando para compacto
+   // Limpa resíduo de outros modos se estiver transitando para compacto
    if(ObjectFind(0, EDDY_UI_PREFIX + "Det_Bg") >= 0)
    {
       UI_DeleteDetailed();
+   }
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Min_Bg") >= 0)
+   {
+      UI_DeleteCollapsed();
    }
 
    datetime t_now = GetServerTimeSafe();
@@ -1001,9 +1113,9 @@ void RenderCompactHUD()
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
 
-   // 1. Cartão Base do HUD (W=260, H=165)
-   UI_SetRect(EDDY_UI_PREFIX + "Hud_CardBg", 0, 0, 260, 165, C'20,24,33', C'40,48,65');
-   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Title", 12, 10, "EDDYTRADER", C'0,180,216', 9, true);
+   // 1. Cartão Base do HUD (W=260, H=192)
+   UI_SetRect(EDDY_UI_PREFIX + "Hud_CardBg", 0, 0, 260, 192, C'20,24,33', C'40,48,65');
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Title", 12, 10, "DISCIPLINADOR TRADER", C'0,180,216', 9, true);
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Ver", 168, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
 
    // 2. Status Humano
@@ -1075,6 +1187,9 @@ void RenderCompactHUD()
    }
    UI_SetButton(EDDY_UI_PREFIX + "Hud_Btn_Details", 158, 134, 90, 22, "DETALHES", C'45,52,65', clrWhite, 8);
 
+   // 8. Botão Minimizar
+   UI_SetButton(EDDY_UI_PREFIX + "Hud_Btn_Min", 12, 162, 236, 22, "[ — MINIMIZAR ]", C'35,42,54', C'170,180,195', 8);
+
    // Se o diálogo de confirmação estiver aberto, atualizamos apenas o resultado atual nele
    if(g_config_ui_state == UI_STATE_CONFIRMING)
    {
@@ -1092,11 +1207,15 @@ void RenderCompactHUD()
 
 void RenderDetailedHUD()
 {
-   // Fecha diálogo e limpa HUD compacto se estiver transitando para detalhado
+   // Fecha diálogo e limpa resíduos se estiver transitando para detalhado
    UI_CloseConfigDialog();
    if(ObjectFind(0, EDDY_UI_PREFIX + "Hud_CardBg") >= 0)
    {
       UI_DeleteHUD();
+   }
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Min_Bg") >= 0)
+   {
+      UI_DeleteCollapsed();
    }
 
    // Garante que o Comment() cru antigo nunca seja exibido na UI técnica
@@ -1148,10 +1267,11 @@ void RenderDetailedHUD()
 
    color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
 
-   // Cartão Detalhado Nativo (W=320, H=310)
-   UI_SetRect(EDDY_UI_PREFIX + "Det_Bg", 0, 0, 320, 310, C'20,24,33', C'0,150,214');
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Title", 12, 10, "EDDYTRADER - DETALHES", C'0,180,216', 9, true);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ver", 220, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
+   // Cartão Detalhado Nativo (W=370, H=340)
+   // A largura extra mantém o título e a versão em áreas independentes.
+   UI_SetRect(EDDY_UI_PREFIX + "Det_Bg", 0, 0, 370, 340, C'20,24,33', C'0,150,214');
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Title", 12, 10, "DISCIPLINADOR TRADER - DETALHES", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ver", 268, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Lbl", 12, 32, "Estado FSM:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Val", 100, 32, StringFormat("%s (%s)", EnumToString(g_current_state), status_str), status_clr, 8, true);
@@ -1195,8 +1315,9 @@ void RenderDetailedHUD()
       UI_SetLabel(EDDY_UI_PREFIX + "Det_Warn", 12, 256, StringFormat("Conta: %I64u | Servidor: %s", g_account_login, AccountInfoString(ACCOUNT_SERVER)), C'130,140,155', 7);
    }
 
-   // Botão de Retorno Garantido e Conspícuo ao Modo Compacto
-   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Back", 12, 276, 296, 24, "[ <- VOLTAR AO RESUMO ]", C'0,122,204', clrWhite, 8, true);
+   // Botões: Retorno ao Resumo e Minimizar
+   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Back", 12, 276, 346, 24, "[ <- VOLTAR AO RESUMO ]", C'0,122,204', clrWhite, 8, true);
+   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Min",  12, 306, 346, 22, "[ — MINIMIZAR ]", C'35,42,54', C'170,180,195', 8);
 
    ChartRedraw(0);
 }
@@ -1210,7 +1331,7 @@ void RenderOffHUD()
    if(!g_is_owner || !g_safe_to_operate)
    {
       string critical_msg = StringFormat(
-         ">>> ATENCAO: EDDYTRADER EM FAIL-CLOSED / OPERACAO BLOQUEADA <<<\n"
+         ">>> ATENCAO: DISCIPLINADOR TRADER EM FAIL-CLOSED / OPERACAO BLOQUEADA <<<\n"
          " Motivo: %s | Estado: %s | Conta: %I64u",
          (!g_is_owner ? "OWNERSHIP PERDIDA" : "SEGURANCA OPERACIONAL COMPROMETIDA"),
          EnumToString(g_current_state),
@@ -1227,9 +1348,20 @@ void RenderOffHUD()
 
 void UpdateHUD()
 {
+   if(g_hud_mode == EDDY_HUD_OFF)
+   {
+      RenderOffHUD();
+      return;
+   }
+
+   if(g_panel_state == PANEL_COLLAPSED)
+   {
+      RenderCollapsedHUD();
+      return;
+   }
+
    switch(g_hud_mode)
    {
-      case EDDY_HUD_OFF:      RenderOffHUD();      break;
       case EDDY_HUD_DETAILED: RenderDetailedHUD(); break;
       case EDDY_HUD_COMPACT:
       default:                RenderCompactHUD();  break;
@@ -1460,10 +1592,10 @@ void ProcessFSM()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("[EddyTrader][INFO] ==================================================");
-   PrintFormat("[EddyTrader][INFO] Inicializando %s v%s - Release Candidate 2", EDDY_PRODUCT_NAME, EDDY_VERSION);
-   PrintFormat("[EddyTrader][INFO] %s", EDDY_PURPOSE);
-   Print("[EddyTrader][INFO] ==================================================");
+   Print("[Disciplinador Trader][INFO] ==================================================");
+   PrintFormat("[Disciplinador Trader][INFO] Inicializando %s v%s - Release Candidate 3", EDDY_PRODUCT_NAME, EDDY_VERSION);
+   PrintFormat("[Disciplinador Trader][INFO] %s", EDDY_PURPOSE);
+   Print("[Disciplinador Trader][INFO] ==================================================");
 
    // 1. Validação estrita de parâmetros de entrada (Hardening Operacional)
    if(InpMaxLoss <= 0.0)
@@ -1499,20 +1631,20 @@ int OnInit()
    ENUM_ACCOUNT_TRADE_MODE trade_mode = (ENUM_ACCOUNT_TRADE_MODE)AccountInfoInteger(ACCOUNT_TRADE_MODE);
    if(trade_mode == ACCOUNT_TRADE_MODE_REAL)
    {
-      Print("[EddyTrader][WARN] ATENÇÃO: Conta REAL detectada! O EddyTrader atuará em modo de proteção absoluta de capital.");
+      Print("[Disciplinador Trader][WARN] ATENÇÃO: Conta REAL detectada! O Disciplinador Trader atuará em modo de proteção absoluta de capital.");
    }
    else
    {
-      Print("[EddyTrader][INFO] Modo de conta DEMO / TESTE detectado.");
+      Print("[Disciplinador Trader][INFO] Modo de conta DEMO / TESTE detectado.");
    }
 
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
    {
-      Print("[EddyTrader][WARN] AVISO: 'Algo Trading' está DESATIVADO nas opções do terminal MT5.");
+      Print("[Disciplinador Trader][WARN] AVISO: 'Algo Trading' está DESATIVADO nas opções do terminal MT5.");
    }
    if(!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
    {
-      Print("[EddyTrader][WARN] AVISO: Negociação desativada para a conta atual.");
+      Print("[Disciplinador Trader][WARN] AVISO: Negociação desativada para a conta atual.");
    }
 
    // 3. Guarda de Instância Única por Conta (OWNER + HEARTBEAT Atômico via CAS)
@@ -1523,6 +1655,21 @@ int OnInit()
 
    // 4. Resolução do Limite Efetivo de Perda e Configuração de Interface
    g_hud_mode = InpHudMode;
+   g_last_expanded_hud_mode = (InpHudMode == EDDY_HUD_DETAILED) ? EDDY_HUD_DETAILED : EDDY_HUD_COMPACT;
+
+   // Resolução da preferência visual de minimização (EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED)
+   string key_panel = GVConfigKey("PANEL_COLLAPSED");
+   if(GlobalVariableCheck(key_panel))
+   {
+      if(GlobalVariableGet(key_panel) == 1.0)
+         g_panel_state = PANEL_COLLAPSED;
+      else
+         g_panel_state = PANEL_EXPANDED;
+   }
+   else
+   {
+      g_panel_state = PANEL_EXPANDED;
+   }
    string config_key = GVConfigKey("MAX_LOSS");
    if(GlobalVariableCheck(config_key))
    {
@@ -1801,14 +1948,50 @@ void OnChartEvent(const int id,
             UI_CloseConfigDialog();
             UI_DeleteHUD();
             g_hud_mode = EDDY_HUD_DETAILED;
+            g_last_expanded_hud_mode = EDDY_HUD_DETAILED;
             Comment("");
          }
          else
          {
             UI_DeleteDetailed();
             g_hud_mode = EDDY_HUD_COMPACT;
+            g_last_expanded_hud_mode = EDDY_HUD_COMPACT;
             Comment("");
          }
+         UpdateHUD();
+         return;
+      }
+
+      // Botão MINIMIZAR no Compacto
+      if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Min")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         g_last_expanded_hud_mode = EDDY_HUD_COMPACT;
+         UI_CloseConfigDialog();
+         UI_DeleteHUD();
+         SetPanelState(PANEL_COLLAPSED);
+         UpdateHUD();
+         return;
+      }
+
+      // Botão MINIMIZAR no Detalhado
+      if(sparam == EDDY_UI_PREFIX + "Det_Btn_Min")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         g_last_expanded_hud_mode = EDDY_HUD_DETAILED;
+         UI_DeleteDetailed();
+         SetPanelState(PANEL_COLLAPSED);
+         UpdateHUD();
+         return;
+      }
+
+      // Botão MAXIMIZAR na faixa minimizada
+      if(sparam == EDDY_UI_PREFIX + "Min_Btn_Expand")
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         UI_DeleteCollapsed();
+         SetPanelState(PANEL_EXPANDED);
+         g_hud_mode = g_last_expanded_hud_mode;
          UpdateHUD();
          return;
       }

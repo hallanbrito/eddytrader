@@ -110,15 +110,26 @@ Este documento formaliza as Regras de Negócio (RN) que regem o comportamento do
 
 ## 9. Regras de Integridade Operacional e Homologação
 
-### RN-010 — Transparência Visual e Registro Contábil
-* **Enunciado:** O operador deve ser mantido informado diretamente na tela do gráfico sobre o estado da proteção, o horário do servidor corrente e as mensagens de liberação ou bloqueio.
-* **Rastreabilidade:** [RF-009](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-009), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RNF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-005).
+### RN-010 — Transparência Visual, Painel HUD Adaptativo e Desacoplamento
+* **Enunciado:** O operador deve ser mantido informado diretamente na tela do gráfico sobre o estado da proteção, o horário do servidor corrente e as métricas financeiras da conta, com controle adaptativo da densidade visual:
+  1. **Estados de Apresentação:** O HUD suporta os modos `PANEL_EXPANDED` (com submodos Compacto e Detalhado) e `PANEL_COLLAPSED` (pill minimizada discreta de $370 \times 26$ px no canto superior esquerdo).
+  2. **Preservação de Modo:** Ao alternar de expandido para minimizado e vice-versa, o sistema preserva e restaura deterministicamente o modo expandido preferido pelo operador (`COMPACT` ou `DETAILED`).
+  3. **Visibilidade Crítica em Bloqueio:** Se o sistema estiver minimizado e ingressar em `LIQUIDATING` ou `BLOCKED`, a pill minimizada altera imediatamente suas cores e texto para alertar em destaque (`🔒 BLOQUEADO hh:mm:ss`) com contagem regressiva em tempo real.
+  4. **Persistência Visual Não-Fatal:** O estado colapsado é salvo na Global Variable `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED`. Esta persistência é puramente cosmética e estritamente desacoplada do conjunto conceitual crítico $\mathbf{D}_{\text{min\_recovery}}$. Qualquer falha na leitura ou escrita das preferências de HUD é silenciosamente ignorada e nunca causará transição para *Fail-Closed*.
+* **Rastreabilidade:** [RF-009](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-009), [RF-011](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-011), [RF-014](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-014), [RNF-005](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rnf-005).
 
 ### RN-011 — Instância Única por Conta
-* **Enunciado:** O EddyTrader opera conceitualmente como um único gerenciador de risco por conta de negociação.
-* **Comportamento:** É expressamente vetada a execução de múltiplas instâncias concorrentes do EddyTrader na mesma conta disputando ordens de liquidação e controle de estados.
+* **Enunciado:** O Disciplinador Trader opera conceitualmente como um único gerenciador de risco por conta de negociação.
+* **Comportamento:** É expressamente vetada a execução de múltiplas instâncias concorrentes do Disciplinador Trader na mesma conta disputando ordens de liquidação e controle de estados.
 * **Rastreabilidade:** Decisão D14, [RISK-006](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#4-riscos-tecnicos-e-operacionais-risks).
 
 ### RN-012 — Homologação Prévia Obrigatória em Conta Demo
-* **Enunciado:** O EddyTrader somente será liberado para uso em Conta Real após aprovação documental e empírica com 100% de sucesso em Conta Demo.
+* **Enunciado:** O Disciplinador Trader somente será liberado para uso em Conta Real após aprovação documental e empírica com 100% de sucesso em Conta Demo.
 * **Rastreabilidade:** Decisão D20, [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md).
+
+### RN-013 — Operação Account-Global e Independência de Símbolo/Gráfico
+* **Enunciado:** O Disciplinador Trader opera com soberania irrestrita e abrangência de conta inteira (*Account-Global*):
+  1. **Independência de Ativo:** A integridade dos cálculos de resultado realizado ($R_{\text{day}}$), flutuante ($F$) e resultado da janela ($W_n$) é calculada em nível de conta, consolidando todos os ativos operados pelo trader ou por robôs terceiros.
+  2. **Isolamento de Gráficos:** O Disciplinador Trader deve operar perfeitamente quando anexado a um gráfico isolado (Gráfico B), enquanto o operador realiza trades manuais via Chart Trade ou executa outros EAs em gráficos separados (Gráfico A).
+  3. **Universalidade na Liquidação:** O fechamento compulsório atinge 100% das ordens e posições abertas na conta, independentemente do símbolo onde foram emitidas ou do seu Magic Number.
+* **Rastreabilidade:** [RF-015](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-015), [RN-004](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-004), [RN-005](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-005).

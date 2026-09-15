@@ -4,6 +4,41 @@ Todas as mudanças relevantes do EddyTrader serão registradas neste arquivo.
 
 O projeto segue versionamento semântico para releases públicas.
 
+## [1.0.0-rc3] — 2026-09-14
+
+Terceiro Release Candidate — W10 Fundação do Disciplinador Trader, HUD Adaptativo e Compatibilidade Account-Global.
+
+### Adicionado
+
+- formalização da identidade pública normativa **"Disciplinador Trader"** no cabeçalho do HUD Compacto (`DISCIPLINADOR TRADER`), HUD Detalhado (`DISCIPLINADOR TRADER - DETALHES`), pill minimizada (`DISCIPLINADOR`), logs de inicialização e documentação oficial;
+- preservação total de compatibilidade técnica e legados internos: arquivo `src/EddyTrader.mq5`, prefixos de objetos `EddyHUD_*`, chaves GlobalVariables `EDDY_*` e identificadores de script;
+- controle adaptativo de visualização com máquina de estados de apresentação visual (`PANEL_EXPANDED` vs `PANEL_COLLAPSED`), estritamente desacoplada da FSM operacional;
+- botão de minimizar `[ — MINIMIZAR ]` integrado no cabeçalho dos painéis Compacto e Detalhado;
+- modo minimizado adaptativo renderizado como *pill* compacta ($370 \times 26$ pixels) com título condensado, status operacional resumido, resultado e limite, e botão de maximização `[ + ]`;
+- mecanismo de memória de submodo expandido (`g_last_expanded_hud_mode`): minimizar e maximizar restaura perfeitamente o modo preferido pelo operador (`COMPACT` ou `DETAILED`);
+- alerta visual de segurança contínuo na pill minimizada durante bloqueio (`🔒 BLOQUEADO hh:mm:ss`) com destaque em amarelo âmbar e contagem regressiva em tempo real;
+- persistência per-account da preferência de HUD colapsado via `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED`, com isolamento defensivo (falhas de leitura/gravação cosmética não afetam $\mathbf{D}_{\text{min\_recovery}}$ e nunca provocam *fail-closed*);
+- formalização normativa da operação e compatibilidade Account-Global ([RF-015](docs/03-REQUISITOS.md#rf-015)), garantindo independência de símbolo, gráfico e Magic Numbers;
+- sonda laboratorial para validação de convivência multi-ativo e robôs terceiros (`tests/probe_external_ea_w10.mq5`) com guarda estrita contra execução em conta Real;
+- especificação do procedimento de validação operacional [COMPAT-01](docs/09-ROADMAP.md#gate-compat-01--convivência-multi-ativo-e-eas-terceiros);
+- catalogação formal da lacuna de especificação [GAP-007](docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-007--proteção-monotônica-de-stop-loss-sl-lock) contendo as 12 questões empíricas para o Spike Técnico da W11 (reafirmando que a funcionalidade de SL Lock **NÃO foi implementada na W10**);
+- script automatizado de teste visual `tests/test_visual_w10.mq5` validando 11 transições dinâmicas de interface no Strategy Tester.
+
+### Validação
+
+- build oficial (`scripts/build.ps1`): **0 errors / 0 warnings** em todos os 7 alvos;
+- bateria de regressão formal expandida para **67/67 PASS** (68 asserções no total, cobrindo `W10R-01` a `W10R-10`);
+- validação visual automatizada no Strategy Tester: **11/11 PASS**;
+- documentação completa harmonizada sob os preceitos do Método C.H.
+
+### Pendente
+
+- `LIVE-01`: validação ponta a ponta da neutralização reativa em conta **Demo** com sessão de mercado aberta;
+- `COMPAT-01`: homologação de convivência multi-ativo e robôs terceiros em conta **Demo**;
+- `GAP-007`: execução do Spike Técnico na W11;
+- promoção do ADR 0005 para `Accepted`;
+- promoção de `1.0.0-rc3` para `1.0.0`.
+
 ## [1.0.0-rc2] — 2026-09-13
 
 Segundo Release Candidate do EddyTrader — W09 Trader UX & Configuração On-Chart.

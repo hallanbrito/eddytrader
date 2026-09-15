@@ -1,6 +1,7 @@
-# 00 — Manifesto do EddyTrader
+# 00 — Manifesto do Disciplinador Trader
 
-> **"EddyTrader é uma ferramenta de controle de risco operacional, não uma estratégia de trading."**
+> **"Disciplinador Trader é uma ferramenta de controle de risco operacional e salvaguarda da disciplina do operador, não uma estratégia de trading."**
+> *(Nome de projeto interno e repositório: **EddyTrader**)*
 
 ---
 
@@ -16,22 +17,22 @@ Operadores necessitam de um guardião automatizado, frio e inflexível: um mecan
 
 ## 2. O Propósito
 
-O propósito do **EddyTrader** é **garantir a sobrevivência do operador**.
+O propósito do **Disciplinador Trader** é **garantir a sobrevivência do operador**.
 
-O EddyTrader existe para impor, de maneira técnica, automática e implacável, o limite monetário diário de perda definido pelo usuário. Sua missão se resume a:
+O Disciplinador Trader existe para impor, de maneira técnica, automática e implacável, o limite monetário diário de perda definido pelo usuário. Sua missão se resume a:
 
-1. Monitorar o resultado financeiro relevante.
+1. Monitorar o resultado financeiro relevante em nível global de conta.
 2. Identificar a violação do limite monetário de perda.
 3. Liquidar compulsoriamente todas as posições abertas.
 4. Cancelar todas as ordens pendentes.
 5. Impedir novas negociações durante a janela de bloqueio.
-6. Liberar as operações apenas quando o horário programado for atingido.
+6. Liberar as operações apenas quando o tempo programado (4 horas) for atingido.
 
 ---
 
 ## 3. Filosofia Fundamental
 
-O desenvolvimento e a evolução do EddyTrader apoiam-se em cinco princípios intransigíveis:
+O desenvolvimento e a evolução do Disciplinador Trader apoiam-se em cinco princípios intransigíveis:
 
 ### 3.1. Proteção do Operador Acima de Tudo
 A preservação do capital presente é a única condição que permite a existência de lucros futuros. Nenhum ganho hipotético justifica a ausência de uma trava absoluta de destruição de capital.
@@ -40,19 +41,19 @@ A preservação do capital presente é a única condição que permite a existê
 Fazer uma única coisa com precisão impecável. Qualquer sofisticação desnecessária introduz pontos de falha que podem comprometer a execução da ordem de emergência quando o capital estiver em risco iminente.
 
 ### 3.3. Previsibilidade e Determinismo
-O comportamento do sistema deve ser 100% determinístico. Diante das mesmas condições de saldo, resultado e tempo, o EddyTrader sempre executará as mesmas ações, sem variações ocultas ou decisões probabilísticas.
+O comportamento do sistema deve ser 100% determinístico. Diante das mesmas condições de saldo, resultado e tempo, o Disciplinador Trader sempre executará as mesmas ações, sem variações ocultas ou decisões probabilísticas.
 
 ### 3.4. Soberania do Risco, Neutralidade da Estratégia
-O EddyTrader é agnóstico à forma como o operador negocia. Ele não julga compras, vendas, tempos gráficos ou indicadores. Sua autoridade se manifesta exclusivamente quando a barreira de risco é rompida.
+O Disciplinador Trader é agnóstico à forma como o operador negocia. Ele não julga compras, vendas, tempos gráficos ou indicadores. Sua autoridade se manifesta exclusivamente quando a barreira de risco é rompida.
 
 ### 3.5. Soberania e Nativismo em MQL5
 O sistema deve rodar diretamente no motor nativo do **MetaTrader 5**. Não haverá dependência de intermediários, DLLs, servidores externos, bancos de dados ou conexões de rede que possam falhar no milissegundo em que a conta precisa ser protegida.
 
 ---
 
-## 4. Limites Fundamentais (O Que o EddyTrader NUNCA Será)
+## 4. Limites Fundamentais (O Que o Disciplinador Trader NUNCA Será)
 
-Para preservar sua integridade conceitual e técnica, o EddyTrader estabelece proibições permanentes:
+Para preservar sua integridade conceitual e técnica, o Disciplinador Trader estabelece proibições permanentes:
 
 * **Não é um gerador de sinais:** jamais analisará tendências, suportes, resistências ou osciladores.
 * **Não é uma estratégia de trading:** jamais abrirá posições de compra ou venda por iniciativa própria.

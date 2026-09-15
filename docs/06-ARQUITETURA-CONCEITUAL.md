@@ -1,6 +1,6 @@
-# 06 — Arquitetura Conceitual do EddyTrader
+# 06 — Arquitetura Conceitual do Disciplinador Trader
 
-Este documento define a arquitetura conceitual e os blocos de responsabilidade do **EddyTrader**, atualizados com as deliberações de produto da **W02**. Este documento é puramente conceitual e normativo: **não define nem antecipa implementações de código MQL5 executável**.
+Este documento define a arquitetura conceitual e os blocos de responsabilidade do **Disciplinador Trader** (nome de projeto interno: **EddyTrader**). Este documento é puramente conceitual e normativo, estabelecendo os princípios estruturais da governança account-global e a separação estrita entre a FSM operacional e o estado de apresentação visual.
 
 ---
 
@@ -116,33 +116,62 @@ stateDiagram-v2
 
 ---
 
-## 4. Reconstrução Determinística vs. Persistência em Disco
+## 4. Máquina de Estados de Apresentação Visual do HUD
+
+A apresentação visual do HUD é governada por uma **Máquina de Estados de Apresentação** independente e estritamente desacoplada da FSM operacional de risco:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PANEL_EXPANDED : Inicialização / Preferência Padrão
+    [*] --> PANEL_COLLAPSED : Preferência Persistida (COLLAPSED == 1)
+
+    state PANEL_EXPANDED {
+        COMPACT --> DETAILED : Clique em [ + DETALHES ]
+        DETAILED --> COMPACT : Clique em [ — RESUMO ]
+    }
+
+    PANEL_EXPANDED --> PANEL_COLLAPSED : Clique em [ — MINIMIZAR ] (Salva g_last_expanded_hud_mode)
+    PANEL_COLLAPSED --> PANEL_EXPANDED : Clique em [ + ] (Restaura g_last_expanded_hud_mode)
+```
+
+### 4.1. Princípios de Desacoplamento Visual
+1. **Isolamento de Falha:** Falhas gráficas na criação ou atualização de objetos no gráfico NUNCA afetam o cálculo de risco nem provocam transição para *Fail-Closed*. O motor de risco opera soberanamente mesmo se o HUD falhar.
+2. **Preservação Determinística do Modo Expandido:** Quando o usuário minimiza o painel a partir do modo `DETAILED`, o sistema armazena essa escolha (`g_last_expanded_hud_mode`). Ao maximizar novamente através do botão `[ + ]`, o modo `DETAILED` é restaurado com exatidão (o mesmo ocorrendo para `COMPACT`).
+3. **Persistência Não-Fatal:** O estado `PANEL_COLLAPSED` é persistido per-account na Global Variable `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED`. A persistência visual é segregada e independente do conjunto conceitual $\mathbf{D}_{\text{min\_recovery}}$.
+
+---
+
+## 5. Reconstrução Determinística vs. Persistência em Disco
 
 A decisão arquitetural de produto para o MVP ([D12](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md)) estabelece:
 
 * **Prioridade Absoluta:** O EA deve reconstruir seu estado a partir dos registros contábeis nativos da conta e do histórico do terminal MT5 sempre que possível.
 * **Racional (KISS / YAGNI):** Evitar arquivos proprietários duplicados no disco reduz pontos de falha, corrupção de dados e complexidade operacional.
-* **Delimitação da W04:** A especificação normativa da FSM formalizou com exatidão o conjunto mínimo de dados conceituais necessários para a recuperação determinística: $\mathbf{D}_{\text{min\_recovery}} = \{ \text{current\_state}, \text{protection\_event\_id}, J_n, B_n, t_{\text{trigger}}, t_{\text{unlock}} \}$. A validação prática sobre a suficiência dos dados nativos do MT5 vs. necessidade de persistência leve auxiliar permanece encaminhada para o Spike Técnico da W05 ([GAP-005](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-005--persistência-e-reconstrução-de-estado-após-reinicialização) e [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md)).
+* **Implementação e Resolução (W06):** A especificação formalizou o conjunto mínimo $\mathbf{D}_{\text{min\_recovery}} = \{ \text{current\_state}, \text{protection\_event\_id}, J_n, B_n, t_{\text{trigger}}, t_{\text{unlock}}, \text{day} \}$ implementado via Global Variables atômicas com prefixo `EDDY_<LOGIN>_*` e guarda de ownership com lease (`EDDY_<LOGIN>_OWNER` + `HEARTBEAT`).
 
 ---
 
-## 5. Escopo da Conta e Restrição de Instância Única
+## 6. Arquitetura Account-Global e Convivência Operacional (Gráfico A vs. Gráfico B)
 
-* **Escopo Global da Conta (D13):** O EddyTrader não atua isolado no ativo do gráfico; sua governança se estende a todas as posições e ordens da conta de negociação.
-* **Instância Única por Conta (D14):** O sistema opera sob o pressuposto de uma única instância por conta. Mecanismos de detecção ou restrição de instâncias concorrentes serão especificados em W04/W05.
+* **Escopo Global da Conta (RF-015 / D13):** O Disciplinador Trader não atua isolado no ativo do gráfico; sua governança se estende a todas as posições e ordens de todos os símbolos da conta de negociação.
+* **Topologia de Isolamento Operacional:**
+  * **Gráfico A (Trader / Robôs Terceiros):** O trader executa ordens discricionárias no ativo desejado (ex: WIN, WDO, EURUSD) via *Chart Trade*, boletas de clique rápido ou através de outros Experts com Magic Numbers específicos.
+  * **Gráfico B (Disciplinador Trader):** Instância única do Disciplinador Trader anexada a um gráfico dedicado, monitorando continuamente o saldo e flutuante global da conta.
+  * **Convivência Pacífica:** Enquanto o risco financeiro estiver dentro dos limites normativos ($W_n(t) > -L$), o Disciplinador não interfere no Gráfico A. Caso a perda atinja o limite, o Disciplinador assume compulsoriamente a liquidação universal e o cancelamento de todas as ordens pendentes.
+* **Instância Única por Conta (D14):** O sistema opera sob o pressuposto de uma única instância por conta garantida pelo protocolo atômico CAS.
 
 ---
 
-## 6. A Questão do Bloqueio no MT5 (Encaminhamento para Spike Técnico)
+## 7. A Questão do Bloqueio no MT5
 
-Conforme mantido no catálogo de questões abertas ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-de-bloqueio-operacional-no-mt5)):
+Conforme homologado no Spike Técnico e na W06/W07 ([DQ-001](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md#dq-001--mecanismo-tecnico-de-bloqueio-operacional-no-mt5)):
 * O requisito de produto determina que novas operações não permaneçam ativas durante o bloqueio.
-* Em MQL5 nativo puro, ordens manuais disparadas diretamente no terminal são tratadas por **neutralização reativa imediata**.
-* A comprovação da latência, dos eventos de negociação (`OnTradeTransaction`) e do comportamento prático será executada no Spike Técnico laboratorial da **W05**.
+* Em MQL5 nativo puro, ordens manuais disparadas diretamente no terminal são tratadas por **neutralização reativa imediata** via `OnTradeTransaction()`.
+* O teste em conta Demo com mercado aberto para validação final de latência está formalizado no gate `LIVE-01`.
 
 ---
 
-## 7. Rastreabilidade Documental
+## 8. Rastreabilidade Documental
 
 * Requisitos Associados: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
 * Casos de Uso: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
