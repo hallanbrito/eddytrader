@@ -1267,10 +1267,11 @@ void RenderDetailedHUD()
 
    color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
 
-   // Cartão Detalhado Nativo (W=320, H=340)
-   UI_SetRect(EDDY_UI_PREFIX + "Det_Bg", 0, 0, 320, 340, C'20,24,33', C'0,150,214');
+   // Cartão Detalhado Nativo (W=370, H=340)
+   // A largura extra mantém o título e a versão em áreas independentes.
+   UI_SetRect(EDDY_UI_PREFIX + "Det_Bg", 0, 0, 370, 340, C'20,24,33', C'0,150,214');
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Title", 12, 10, "DISCIPLINADOR TRADER - DETALHES", C'0,180,216', 9, true);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ver", 220, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ver", 268, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Lbl", 12, 32, "Estado FSM:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Val", 100, 32, StringFormat("%s (%s)", EnumToString(g_current_state), status_str), status_clr, 8, true);
@@ -1315,8 +1316,8 @@ void RenderDetailedHUD()
    }
 
    // Botões: Retorno ao Resumo e Minimizar
-   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Back", 12, 276, 296, 24, "[ <- VOLTAR AO RESUMO ]", C'0,122,204', clrWhite, 8, true);
-   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Min",  12, 306, 296, 22, "[ — MINIMIZAR ]", C'35,42,54', C'170,180,195', 8);
+   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Back", 12, 276, 346, 24, "[ <- VOLTAR AO RESUMO ]", C'0,122,204', clrWhite, 8, true);
+   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Min",  12, 306, 346, 22, "[ — MINIMIZAR ]", C'35,42,54', C'170,180,195', 8);
 
    ChartRedraw(0);
 }

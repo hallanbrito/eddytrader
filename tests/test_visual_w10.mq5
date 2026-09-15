@@ -129,10 +129,13 @@ void RunVisualTests()
    // Simula clique em [ DETALHES ]
    ObjectsDeleteAll(0, EDDY_UI_PREFIX + "Hud_");
    ObjectCreate(0, EDDY_UI_PREFIX + "Det_Bg", OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_XSIZE, 320);
+   ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_XSIZE, 370);
    ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_YSIZE, 340);
    ObjectCreate(0, EDDY_UI_PREFIX + "Det_Title", OBJ_LABEL, 0, 0, 0);
    ObjectSetString(0, EDDY_UI_PREFIX + "Det_Title", OBJPROP_TEXT, "DISCIPLINADOR TRADER - DETALHES");
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_Ver", OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Ver", OBJPROP_XDISTANCE, 268);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_Ver", OBJPROP_TEXT, "v1.0.0-rc3 [DEMO]");
    ObjectCreate(0, EDDY_UI_PREFIX + "Det_Btn_Back", OBJ_BUTTON, 0, 0, 0);
    ObjectSetString(0, EDDY_UI_PREFIX + "Det_Btn_Back", OBJPROP_TEXT, "[ <- VOLTAR AO RESUMO ]");
    ObjectCreate(0, EDDY_UI_PREFIX + "Det_Btn_Min", OBJ_BUTTON, 0, 0, 0);
@@ -140,9 +143,11 @@ void RunVisualTests()
 
    bool p6_ok = (ObjectFind(0, EDDY_UI_PREFIX + "Det_Bg") >= 0 &&
                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_Title", OBJPROP_TEXT) == "DISCIPLINADOR TRADER - DETALHES" &&
+                 ObjectGetInteger(0, EDDY_UI_PREFIX + "Det_Ver", OBJPROP_XDISTANCE) == 268 &&
+                 ObjectGetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_XSIZE) == 370 &&
                  ObjectGetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_YSIZE) == 340);
    if(p6_ok) passed++;
-   LogVisual(hFile, "Passo 6 (DETALHES)", p6_ok, "Painel DETAILED ativo: W=320, H=340 com botões VOLTAR e MINIMIZAR");
+   LogVisual(hFile, "Passo 6 (DETALHES)", p6_ok, "Painel DETAILED ativo: W=370, H=340 com título/versão separados e botões VOLTAR e MINIMIZAR");
 
    //-----------------------------------------------------------------
    // Passo 7: MINIMIZAR a partir do DETAILED
@@ -168,7 +173,7 @@ void RunVisualTests()
    if(saved_mode == 1)
    {
       ObjectCreate(0, EDDY_UI_PREFIX + "Det_Bg", OBJ_RECTANGLE_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_XSIZE, 320);
+      ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_XSIZE, 370);
       ObjectSetInteger(0, EDDY_UI_PREFIX + "Det_Bg", OBJPROP_YSIZE, 340);
       ObjectCreate(0, EDDY_UI_PREFIX + "Det_Title", OBJ_LABEL, 0, 0, 0);
       ObjectSetString(0, EDDY_UI_PREFIX + "Det_Title", OBJPROP_TEXT, "DISCIPLINADOR TRADER - DETALHES");
