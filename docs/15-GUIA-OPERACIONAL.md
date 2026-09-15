@@ -85,7 +85,7 @@ input group "=== Interface e Painel (UX) ==="
 input ENUM_EDDY_HUD_MODE InpHudMode    = EDDY_HUD_COMPACT;       // Modo Visual do Painel
 input ENUM_BASE_CORNER   InpHudCorner  = CORNER_LEFT_UPPER;      // Canto do Gráfico
 input int                InpHudOffsetX = 20;                     // Distância Horizontal (X) em Pixels
-input int                InpHudOffsetY = 30;                     // Distância Vertical (Y) em Pixels
+input int                InpHudOffsetY = 10;                     // Distância Vertical Adicional (Y) em Pixels
 
 input group "=== Configurações Operacionais ==="
 input int    InpTimerIntervalMs    = 500;   // Intervalo de Varredura do Timer (Milissegundos, 50 a 5000)
@@ -103,12 +103,12 @@ input ulong  InpDeviationPoints    = 10;    // Desvio Máximo / Slippage Tolerad
 * **`InpHudMode` (Default: `EDDY_HUD_COMPACT`):**
   * Define o modo visual de exibição na tela do gráfico:
     * `EDDY_HUD_COMPACT`: Painel interativo moderno e compacto com botões on-chart (recomendado para traders);
-    * `EDDY_HUD_DETAILED`: Painel clássico textual de auditoria técnica via `Comment()`;
+    * `EDDY_HUD_DETAILED`: Painel gráfico nativo dedicado de auditoria técnica (sem poluir o gráfico com texto via `Comment()`);
     * `EDDY_HUD_OFF`: Desativa completamente qualquer elemento visual no gráfico.
 * **`InpHudCorner` (Default: `CORNER_LEFT_UPPER`):**
   * Canto do gráfico onde o painel visual é ancorado.
-* **`InpHudOffsetX` / `InpHudOffsetY` (Default: `20` / `30`):**
-  * Espaçamento em pixels a partir das margens do canto ancorado.
+* **`InpHudOffsetX` / `InpHudOffsetY` (Default: `20` / `10`):**
+  * Espaçamento em pixels a partir das margens do canto ancorado. Em `CORNER_LEFT_UPPER`, o EddyTrader reserva automaticamente uma margem de segurança vertical de 80px para não colidir com o painel nativo One Click Trading (BUY/SELL) do MT5, aplicando `InpHudOffsetY` como ajuste adicional do usuário.
 * **`InpTimerIntervalMs` (Default: `500`):**
   * Frequência do pulso de alta precisão via `EventSetMillisecondTimer`. Faixa operacional: 50 a 5000 ms.
 * **`InpDeviationPoints` (Default: `10`):**
@@ -135,7 +135,7 @@ O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de 
 - **Proteção:** Status vigilante em operação normal ou contagem regressiva precisa durante bloqueio (`Bloqueio: hh:mm:ss`).
 - **Operações:** Posições abertas e ordens pendentes atuais (ex: `2 pos / 0 ord`).
 - **Botão `[ CONFIGURAR ]`:** Abre uma janela independente de configuração no gráfico (ou exibe `[ BLOQUEADO ]` se a proteção estiver ativa).
-- **Botão `[ DETALHES ]`:** Alterna instantaneamente para o extrato técnico detalhado de engenharia.
+- **Botão `[ DETALHES ]`:** Alterna instantaneamente para o painel técnico gráfico de engenharia.
 
 ### 6.2 Fluxo de Alteração de Limite pelo Gráfico
 
@@ -160,34 +160,14 @@ O painel padrão é renderizado diretamente sobre o gráfico com tema escuro de 
 
 ### 6.4 Painel Detalhado de Engenharia (`EDDY_HUD_DETAILED`)
 
-Para fins de auditoria, certificação ou conferência técnica de variáveis internas, o operador pode clicar em `[ DETALHES ]`, exibindo o extrato completo:
+Para fins de auditoria, certificação ou conferência técnica de variáveis internas, o operador pode clicar em `[ DETALHES ]`, exibindo um cartão gráfico nativo organizado diretamente no gráfico (sem poluição textual via `Comment()`):
 
-```text
-====================================================
- EddyTrader v1.0.0-rc2 - Release Candidate 2
- Gerenciador de Risco Operacional e Limite de Perda Diária (MQL5 Nativo)
-====================================================
- Conta: 6272676 | Modo: DEMO | Servidor: ActivTradesCorp-Server
- Instancia: #1788220800502530 (Owner: SIM)
- Horario Servidor: 2026.09.13 14:35:10
-----------------------------------------------------
- Estado FSM: MONITORING (MONITORANDO)
- Janela Ativa: J0 | Baseline (Bn): 0.00
- Perda Maxima Efetiva (L): -500.00
-----------------------------------------------------
- R_day (Realizado Hoje):    -120.00 USD
- F(t)  (Flutuante Liquido):  -85.50 USD
- D(t)  (Consolidado Hoje):  -205.50 USD
- W_n(t)(Resultado Janela):  -205.50 USD
-----------------------------------------------------
- Status de Protecao: NOMINAL / VIGILANTE
- ID do Evento: 0
- Informacao de Bloqueio: Nenhum bloqueio ativo
- Posicoes Abertas: 2 | Ordens Pendentes: 0
- Negociacao Autorizada: SIM (NOMINAL)
-====================================================
-```
-Um botão `[ PAINEL COMPACTO ]` é exibido no topo para retornar ao modo compacto com um único clique.
+- **Identificação e Estado:** Título do produto, versão, modo (`DEMO` / `REAL`), estado da FSM e status humano traduzido;
+- **Janela e Limite:** Identificador da janela intradiária corrente ($J_n$), valor da baseline consolidada ($B_n$) e limite de perda efetivo ($-L$);
+- **Variáveis Matemáticas em Tempo Real:** Resultado realizado hoje ($R_{\text{day}}$), flutuante líquido ($F(t)$), consolidado do dia ($D(t)$) e resultado da janela ativa ($W_n(t)$);
+- **Segurança e Bloqueio:** ID formal do evento de proteção, contagem regressiva precisa de desbloqueio temporal e banner de alerta caso ocorra fail-closed;
+- **Inventário e Concorrência:** Total de posições e ordens pendentes, ID da instância operacional e status de ownership ativa;
+- **Botão de Retorno Garantido:** Um botão proeminente `[ ← VOLTAR AO RESUMO ]` posicionado confortavelmente na base do cartão restaura o painel compacto com 100% de confiabilidade em qualquer condição de mercado.
 
 ### Significado dos Estados da Máquina de Estados (FSM)
 1. **`INIT` (Inicialização / Estado Transitório):**

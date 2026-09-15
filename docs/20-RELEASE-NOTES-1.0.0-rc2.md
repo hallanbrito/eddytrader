@@ -27,7 +27,7 @@ Todas as garantias fundamentais de segurança, integridade matemática, FSM norm
   - **Proteção / Tempo Restante:** `Vigilante` em operação normal ou contagem regressiva precisa (`Bloqueio: hh:mm:ss`) durante contenção ou bloqueio ativo.
   - **Operações:** Posições abertas e ordens pendentes atuais (ex: `0 pos / 0 ord`).
   - **Botão `[ CONFIGURAR ]`:** Acesso imediato à janela dedicada de configuração on-chart sem abrir menus do MT5 (ou `[ BLOQUEADO ]` sob proteção ativa).
-  - **Botão `[ DETALHES ]`:** Alternância com um clique para a visualização técnica completa de auditoria via comentário do gráfico.
+  - **Botão `[ DETALHES ]`:** Alternância com um clique para o painel técnico gráfico dedicado nativo (sem uso de `Comment()`).
 
 ### 2.2 Janela Separada de Configuração e Digitação Real Estável
 - **Painel Dedicado Independente:** Clicar em `[ CONFIGURAR ]` abre uma janela confortável e espaçosa posicionada estrategicamente no gráfico, mantendo o painel principal de monitoramento 100% visível.
@@ -70,7 +70,7 @@ Todas as garantias fundamentais de segurança, integridade matemática, FSM norm
 | **Interface (UX)** | `InpHudMode` | `enum` | `EDDY_HUD_COMPACT` | Modo visual (`EDDY_HUD_COMPACT`, `EDDY_HUD_DETAILED`, `EDDY_HUD_OFF`). |
 | **Interface (UX)** | `InpHudCorner` | `enum` | `CORNER_LEFT_UPPER` | Canto de ancoragem do HUD no gráfico do MT5. |
 | **Interface (UX)** | `InpHudOffsetX` | `int` | `20` | Deslocamento horizontal do painel em pixels ($\ge 0$). |
-| **Interface (UX)** | `InpHudOffsetY` | `int` | `30` | Deslocamento vertical do painel em pixels ($\ge 0$). |
+| **Interface (UX)** | `InpHudOffsetY` | `int` | `10` | Deslocamento vertical adicional em pixels ($\ge 0$, com reserva automática de 80px abaixo do One Click Trading no canto superior esquerdo). |
 | **Operacional** | `InpTimerIntervalMs` | `int` | `500` | Intervalo de varredura do timer em milissegundos (50 a 5000ms). |
 | **Operacional** | `InpDeviationPoints` | `ulong` | `10` | Slippage/desvio máximo tolerado na liquidação (pontos). |
 
@@ -78,7 +78,7 @@ Todas as garantias fundamentais de segurança, integridade matemática, FSM norm
 
 ## 4. Status da Bateria de Testes Automatizada
 
-A suíte formal de regressão (`tests/test_fsm_w06.mq5`) conta com **52 cenários automatizados**, cobrindo exaustivamente todas as regras de proteção, concorrência, tolerância a falhas e Trader UX:
+A suíte formal de regressão (`tests/test_fsm_w06.mq5`) conta com **57 cenários automatizados**, cobrindo exaustivamente todas as regras de proteção, concorrência, tolerância a falhas e Trader UX:
 
 | Grupo de Testes | Quantidade | Cenários | Status |
 | :--- | :---: | :--- | :---: |
@@ -89,14 +89,15 @@ A suíte formal de regressão (`tests/test_fsm_w06.mq5`) conta com **52 cenário
 | **Trader UX, Parsing e Precedência W09** | 12 | `W09R-01` a `W09R-12` | **APROVADO (12/12)** |
 | **Persistência Transacional e Salvaguardas W09.1** | 7 | `W09R-13` a `W09R-19` | **APROVADO (7/7)** |
 | **Estabilidade de Edição e Fluxo Trader UX W09.2** | 5 | `W09R-20` a `W09R-24` | **APROVADO (5/5)** |
-| **TOTAL GERAL** | **52** | **100% da Bateria de Regressão** | **52/52 PASS** |
+| **Layout One Click Trading e Detalhes Reversível W09.3** | 5 | `W09R-25` a `W09R-29` | **APROVADO (5/5)** |
+| **TOTAL GERAL** | **57** | **100% da Bateria de Regressão** | **57/57 PASS** |
 
-### Resumo dos Cenários W09R-20 a W09R-24:
-- **W09R-20:** Durante edição ativa, refresh periódico da UI não sobrescreve o texto digitado pelo usuário;
-- **W09R-21:** Abrir painel de configuração mantém `g_max_loss` inalterado e não persiste qualquer valor;
-- **W09R-22:** Cancelar edição não altera `g_max_loss` nem persiste valor em GlobalVariables;
-- **W09R-23:** Campo aceita valor com vírgula, mantém digitação até confirmação e aplica corretamente após normalização;
-- **W09R-24:** Campo aceita valor com ponto, mantém digitação até confirmação e aplica corretamente após normalização.
+### Resumo dos Cenários W09R-25 a W09R-29 (W09.3):
+- **W09R-25:** Transição COMPACT -> DETAILED altera exclusivamente `g_hud_mode` sem afetar `g_max_loss` ou FSM;
+- **W09R-26:** Clique em `[ ← VOLTAR AO RESUMO ]` no painel detalhado restaura com sucesso `EDDY_HUD_COMPACT`;
+- **W09R-27:** Alternância contínua de modos visuais preserva integralmente `t_trigger`, `t_unlock`, `event_id`, `baseline` e `window_id`;
+- **W09R-28:** Abrir DETALHES fecha de maneira segura qualquer diálogo de configuração sem aplicar valor pendente;
+- **W09R-29:** Retorno ao modo COMPACT restaura a disponibilidade do botão `[ CONFIGURAR ]` sob `MONITORING` seguro e bloqueia sob fail-closed.
 
 ---
 

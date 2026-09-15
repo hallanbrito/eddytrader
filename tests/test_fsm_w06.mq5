@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..24"
+#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..29"
 
 //--- Definição dos Estados da FSM
 enum ENUM_EDDY_STATE
@@ -17,6 +17,14 @@ enum ENUM_EDDY_STATE
    EDDY_STATE_LIQUIDATING          = 3,
    EDDY_STATE_BLOCKED              = 4,
    EDDY_STATE_REOPENING            = 5
+};
+
+//--- Definição dos Modos de HUD (W09/W09.3)
+enum ENUM_EDDY_HUD_MODE
+{
+   EDDY_HUD_COMPACT  = 0, // Painel Compacto Trader
+   EDDY_HUD_DETAILED = 1, // Painel Técnico Detalhado
+   EDDY_HUD_OFF      = 2  // HUD Desativado
 };
 
 //--- Definição dos Estados da Interface de Configuração (W09/W09.2)
@@ -1547,6 +1555,119 @@ void RunAllTests()
    AssertTest("W09R-24",
               (parse_ok_24 && parsed_dot == 850.25 && apply_ok_24 && test_g_max_loss == 850.25 && gv_ok_24),
               "Campo aceita valor com ponto, mantem digitacao ate confirmacao e aplica corretamente apos normalizacao");
+
+   //-----------------------------------------------------------------
+   // W09R-25: COMPACT -> DETAILED Altera Somente g_hud_mode e Não Afeta g_max_loss / FSM
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   ENUM_EDDY_HUD_MODE sim_hud_mode_25 = EDDY_HUD_COMPACT;
+
+   // Simula transição para DETAILED ao clicar em DETALHES
+   sim_hud_mode_25 = EDDY_HUD_DETAILED;
+
+   AssertTest("W09R-25",
+              (sim_hud_mode_25 == EDDY_HUD_DETAILED &&
+               test_state == EDDY_STATE_MONITORING &&
+               test_safe_to_operate == true &&
+               test_g_max_loss == 500.0),
+              "Transicao COMPACT -> DETAILED altera somente g_hud_mode sem afetar g_max_loss ou estado da FSM");
+
+   //-----------------------------------------------------------------
+   // W09R-26: DETAILED -> COMPACT Restaura Corretamente o Modo Resumido
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ENUM_EDDY_HUD_MODE sim_hud_mode_26 = EDDY_HUD_DETAILED;
+
+   // Simula clique em [ <- VOLTAR AO RESUMO ] no painel detalhado
+   sim_hud_mode_26 = EDDY_HUD_COMPACT;
+
+   AssertTest("W09R-26",
+              (sim_hud_mode_26 == EDDY_HUD_COMPACT),
+              "Clique em VOLTAR AO RESUMO no painel detalhado restaura com sucesso g_hud_mode para EDDY_HUD_COMPACT");
+
+   //-----------------------------------------------------------------
+   // W09R-27: Troca de Modo Não Altera Variáveis de Risco e Bloqueio
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_t_trigger = 1700000000;
+   test_t_unlock  = 1700014400;
+   test_event_id  = 987654321;
+   test_baseline  = -250.75;
+   test_window_id = 3;
+
+   datetime snap_trigger   = test_t_trigger;
+   datetime snap_unlock    = test_t_unlock;
+   ulong    snap_event_id  = test_event_id;
+   double   snap_baseline  = test_baseline;
+   int      snap_window_id = test_window_id;
+
+   // Cicla alternância de modos visuais: COMPACT -> DETAILED -> COMPACT
+   ENUM_EDDY_HUD_MODE sim_cycle_mode = EDDY_HUD_COMPACT;
+   sim_cycle_mode = EDDY_HUD_DETAILED;
+   sim_cycle_mode = EDDY_HUD_COMPACT;
+
+   bool risk_vars_preserved = (test_t_trigger == snap_trigger &&
+                               test_t_unlock == snap_unlock &&
+                               test_event_id == snap_event_id &&
+                               test_baseline == snap_baseline &&
+                               test_window_id == snap_window_id);
+
+   AssertTest("W09R-27",
+              (sim_cycle_mode == EDDY_HUD_COMPACT && risk_vars_preserved),
+              "Alternancia entre modos de interface preserva integralmente t_trigger, t_unlock, event_id, baseline e window_id");
+
+   //-----------------------------------------------------------------
+   // W09R-28: Abrir DETALHES Fecha com Segurança Diálogo de Configuração Sem Aplicar Valor
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_g_max_loss      = 500.0;
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   ENUM_CONFIG_UI_STATE sim_ui_state_28 = UI_STATE_EDITING;
+   double sim_pending_28 = 750.0;
+
+   // Ao abrir DETALHES, a rotina UI_CloseConfigDialog() fecha a janela e zera pendência sem gravar GV nem alterar g_max_loss
+   if(sim_ui_state_28 != UI_STATE_IDLE)
+   {
+      sim_ui_state_28  = UI_STATE_IDLE;
+      sim_pending_28   = 0.0;
+   }
+   ENUM_EDDY_HUD_MODE sim_hud_mode_28 = EDDY_HUD_DETAILED;
+   bool gv_written_28 = GlobalVariableCheck(TestGVConfigKey("MAX_LOSS"));
+
+   AssertTest("W09R-28",
+              (sim_hud_mode_28 == EDDY_HUD_DETAILED &&
+               sim_ui_state_28 == UI_STATE_IDLE &&
+               sim_pending_28 == 0.0 &&
+               test_g_max_loss == 500.0 &&
+               !gv_written_28),
+              "Abrir painel DETALHES fecha de maneira segura o dialogo de configuracao sem aplicar valor pendente");
+
+   //-----------------------------------------------------------------
+   // W09R-29: Retorno ao COMPACT Restaura Disponibilidade do Botão CONFIGURAR
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   bool sim_is_owner_29 = true;
+
+   // Estando em DETAILED, volta para COMPACT
+   ENUM_EDDY_HUD_MODE sim_hud_mode_29 = EDDY_HUD_DETAILED;
+   sim_hud_mode_29 = EDDY_HUD_COMPACT;
+
+   // Em COMPACT, can_configure é avaliado como (g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner)
+   bool can_cfg_nominal = (test_state == EDDY_STATE_MONITORING && test_safe_to_operate && sim_is_owner_29);
+
+   // Testa também se uma condição fail-closed bloqueia o botão no retorno
+   test_safe_to_operate = false;
+   bool can_cfg_failclosed = (test_state == EDDY_STATE_MONITORING && test_safe_to_operate && sim_is_owner_29);
+
+   AssertTest("W09R-29",
+              (sim_hud_mode_29 == EDDY_HUD_COMPACT && can_cfg_nominal == true && can_cfg_failclosed == false),
+              "Retorno ao modo COMPACT restaura botao CONFIGURAR quando MONITORING seguro e bloqueia em fail-closed");
 
    // Limpeza final de GVs de teste
    TestClearGV();

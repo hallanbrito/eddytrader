@@ -61,7 +61,7 @@ Depois de anexar o EA, o painel compacto exibirá diretamente no gráfico:
 - **Operações:** contagem de posições abertas e ordens pendentes;
 - **Botões:** `[ CONFIGURAR ]` e `[ DETALHES ]`.
 
-Se precisar da visualização técnica completa de engenharia com todas as variáveis matemáticas e de persistência, clique em **[ DETALHES ]** (e volte a qualquer momento clicando em **[ PAINEL COMPACTO ]**).
+Se precisar da visualização técnica completa de engenharia com todas as variáveis matemáticas e de persistência, clique em **[ DETALHES ]** (e volte a qualquer momento clicando em **[ ← VOLTAR AO RESUMO ]**).
 
 ## 5. Como alterar o limite de perda diretamente pelo gráfico
 

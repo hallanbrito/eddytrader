@@ -44,7 +44,7 @@ input group "=== Interface e Painel (UX) ==="
 input ENUM_EDDY_HUD_MODE InpHudMode    = EDDY_HUD_COMPACT;       // Modo Visual do Painel
 input ENUM_BASE_CORNER   InpHudCorner  = CORNER_LEFT_UPPER;      // Canto do Gráfico
 input int                InpHudOffsetX = 20;                     // Distância Horizontal (X) em Pixels
-input int                InpHudOffsetY = 30;                     // Distância Vertical (Y) em Pixels
+input int                InpHudOffsetY = 10;                     // Distância Vertical Adicional (Y) em Pixels
 
 input group "=== Configurações Operacionais ==="
 input int    InpTimerIntervalMs    = 500;   // Intervalo de Varredura do Timer (Milissegundos, 50 a 5000)
@@ -709,6 +709,21 @@ bool SetMaxLossConfig(double new_limit, string &err_msg)
 //+------------------------------------------------------------------+
 //| Primitivas de Manipulação de Objetos Gráficos Nativos            |
 //+------------------------------------------------------------------+
+//--- Margem de Segurança para Painel One Click Trading do MT5 (BUY/SELL no topo esquerdo)
+#define ONE_CLICK_SAFE_MARGIN_Y 80
+
+int GetHudOriginX()
+{
+   return InpHudOffsetX;
+}
+
+int GetHudOriginY()
+{
+   if(InpHudCorner == CORNER_LEFT_UPPER)
+      return ONE_CLICK_SAFE_MARGIN_Y + InpHudOffsetY;
+   return InpHudOffsetY;
+}
+
 void UI_SetRect(const string name, int x, int y, int w, int h, color bg_clr, color border_clr = clrNONE)
 {
    if(ObjectFind(0, name) < 0)
@@ -720,8 +735,8 @@ void UI_SetRect(const string name, int x, int y, int w, int h, color bg_clr, col
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, GetHudOriginX() + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, GetHudOriginY() + y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
@@ -740,8 +755,8 @@ void UI_SetLabel(const string name, int x, int y, const string text, color clr, 
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, GetHudOriginX() + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, GetHudOriginY() + y);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
@@ -759,8 +774,8 @@ void UI_SetButton(const string name, int x, int y, int w, int h, const string te
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
    }
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, GetHudOriginX() + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, GetHudOriginY() + y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
@@ -785,8 +800,8 @@ void UI_SetEdit(const string name, int x, int y, int w, int h, const string text
       ObjectSetInteger(0, name, OBJPROP_ALIGN, ALIGN_CENTER);
       ObjectSetString(0, name, OBJPROP_TEXT, text); // Seta texto inicial APENAS na criação
    }
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpHudOffsetX + x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpHudOffsetY + y);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, GetHudOriginX() + x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, GetHudOriginY() + y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
@@ -813,6 +828,12 @@ void UI_DeleteHUD()
    ChartRedraw(0);
 }
 
+void UI_DeleteDetailed()
+{
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX + "Det_");
+   ChartRedraw(0);
+}
+
 //+------------------------------------------------------------------+
 //| Janela Separada de Configuração de Limite de Perda               |
 //+------------------------------------------------------------------+
@@ -821,19 +842,19 @@ void GetDialogPosition(int &dlg_x, int &dlg_y)
    // Dimensões do HUD: W = 260, H = 165
    // Dimensões do Diálogo: W = 280, H = 205
    long chart_h = ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
-   int needed_h = InpHudOffsetY + 165 + 215 + 20;
+   int needed_h = GetHudOriginY() + 165 + 215 + 20;
 
    // Se houver espaço vertical suficiente, posiciona abaixo do HUD
    if(chart_h <= 0 || chart_h >= needed_h)
    {
-      dlg_x = 0;           // Relativo a InpHudOffsetX
-      dlg_y = 175;         // Relativo a InpHudOffsetY (logo abaixo do HUD)
+      dlg_x = 0;           // Relativo a GetHudOriginX()
+      dlg_y = 175;         // Relativo a GetHudOriginY() (logo abaixo do HUD)
    }
    else
    {
       // Em janelas verticalmente compactas, posiciona ao lado do HUD
-      dlg_x = 270;         // Relativo a InpHudOffsetX (à direita do HUD)
-      dlg_y = 0;           // Relativo a InpHudOffsetY
+      dlg_x = 270;         // Relativo a GetHudOriginX() (à direita do HUD)
+      dlg_y = 0;           // Relativo a GetHudOriginY()
    }
 }
 
@@ -967,6 +988,12 @@ void RenderCompactHUD()
       }
    }
 
+   // Limpa resíduo do painel detalhado se estiver transitando para compacto
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Det_Bg") >= 0)
+   {
+      UI_DeleteDetailed();
+   }
+
    datetime t_now = GetServerTimeSafe();
    double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
    double F       = CalculateFloatingResult();
@@ -1065,92 +1092,113 @@ void RenderCompactHUD()
 
 void RenderDetailedHUD()
 {
-   // Fecha diálogo e limpa HUD compacto
+   // Fecha diálogo e limpa HUD compacto se estiver transitando para detalhado
    UI_CloseConfigDialog();
-   UI_DeleteHUD();
+   if(ObjectFind(0, EDDY_UI_PREFIX + "Hud_CardBg") >= 0)
+   {
+      UI_DeleteHUD();
+   }
 
-   // Botão para retornar ao compacto
-   UI_SetButton(EDDY_UI_PREFIX + "Btn_Mode", 10, 10, 160, 24, "[ PAINEL COMPACTO ]", C'0,122,204', clrWhite, 8);
-   ChartRedraw(0);
+   // Garante que o Comment() cru antigo nunca seja exibido na UI técnica
+   Comment("");
 
    datetime t_now = GetServerTimeSafe();
-   double R_day = CalculateRealizedResultToday(g_day_start, t_now);
-   double F = CalculateFloatingResult();
-   double D = R_day + F;
-   double W = CalculateWindowResult(D, g_baseline);
-
-   string lock_info = "Nenhum bloqueio ativo";
-   if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
-   {
-      long remaining_sec = (long)(g_t_unlock - t_now);
-      if(remaining_sec < 0) remaining_sec = 0;
-      int hours = (int)(remaining_sec / 3600);
-      int mins  = (int)((remaining_sec % 3600) / 60);
-      int secs  = (int)(remaining_sec % 60);
-      lock_info = StringFormat("Desbloqueio: %s (Restante: %02d:%02d:%02d)",
-                               TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS),
-                               hours, mins, secs);
-   }
-
-   string fail_closed_banner = "";
-   if(!g_is_owner || (!g_safe_to_operate && g_current_state != EDDY_STATE_MONITORING))
-   {
-      fail_closed_banner = ">>> ATENCAO: OPERACAO BLOQUEADA / FAIL-CLOSED <<<\n";
-   }
-
-   string auth_str = (!g_is_owner) ? "NAO (OWNERSHIP PERDIDA / FAIL-CLOSED)" :
-                     ((g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate) ? "SIM (NOMINAL)" : "NAO (BLOQUEADO/FAIL-CLOSED)");
+   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
+   double F       = CalculateFloatingResult();
+   double D       = R_day + F;
+   double W       = CalculateWindowResult(D, g_baseline);
+   string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
 
-   string hud = StringFormat(
-      "====================================================\n"
-      " %s v%s - Release Candidate 2\n"
-      " %s\n"
-      "====================================================\n"
-      "%s"
-      " Conta: %I64u | Modo: %s | Servidor: %s\n"
-      " Instancia: #%I64u (Owner: %s)\n"
-      " Horario Servidor: %s\n"
-      "----------------------------------------------------\n"
-      " Estado FSM: %s (%s)\n"
-      " Janela Ativa: J%d | Baseline (Bn): %.2f\n"
-      " Perda Maxima Efetiva (L): -%.2f\n"
-      "----------------------------------------------------\n"
-      " R_day (Realizado Hoje):    %.2f %s\n"
-      " F(t)  (Flutuante Liquido): %.2f %s\n"
-      " D(t)  (Consolidado Hoje):  %.2f %s\n"
-      " W_n(t)(Resultado Janela):  %.2f %s\n"
-      "----------------------------------------------------\n"
-      " Status de Protecao: %s\n"
-      " ID do Evento: %I64u\n"
-      " Informacao de Bloqueio: %s\n"
-      " Posicoes Abertas: %d | Ordens Pendentes: %d\n"
-      " Negociacao Autorizada: %s\n"
-      "====================================================",
-      EDDY_PRODUCT_NAME, EDDY_VERSION,
-      EDDY_PURPOSE,
-      fail_closed_banner,
-      g_account_login,
-      mode_str,
-      AccountInfoString(ACCOUNT_SERVER),
-      g_instance_id,
-      (g_is_owner ? "SIM" : "NAO"),
-      TimeToString(t_now, TIME_DATE|TIME_SECONDS),
-      EnumToString(g_current_state), GetHumanStateName(g_current_state),
-      g_window_id, g_baseline,
-      g_max_loss,
-      R_day, AccountInfoString(ACCOUNT_CURRENCY),
-      F, AccountInfoString(ACCOUNT_CURRENCY),
-      D, AccountInfoString(ACCOUNT_CURRENCY),
-      W, AccountInfoString(ACCOUNT_CURRENCY),
-      (g_current_state == EDDY_STATE_MONITORING ? "NOMINAL / VIGILANTE" : "PROTECAO ATIVADA"),
-      g_protection_event_id,
-      lock_info,
-      PositionsTotal(), OrdersTotal(),
-      auth_str
-   );
+   // Informações de Bloqueio e Status
+   string lock_str = "Nenhum (Vigilante)";
+   color  prot_clr = C'46,204,113';
+   if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
+   {
+      long rem_sec = (long)(g_t_unlock - t_now);
+      if(rem_sec < 0) rem_sec = 0;
+      int h = (int)(rem_sec / 3600);
+      int m = (int)((rem_sec % 3600) / 60);
+      int s = (int)(rem_sec % 60);
+      lock_str = StringFormat("%02d:%02d:%02d (Ate %s)", h, m, s, TimeToString(g_t_unlock, TIME_MINUTES|TIME_SECONDS));
+      prot_clr = C'243,156,18';
+   }
+   else if(g_config_feedback_msg != "" && t_now <= g_config_feedback_expiry)
+   {
+      lock_str = g_config_feedback_msg;
+      prot_clr = C'46,204,113';
+   }
 
-   Comment(hud);
+   string status_str = GetHumanStateName(g_current_state);
+   color  status_clr = clrWhite;
+   switch(g_current_state)
+   {
+      case EDDY_STATE_MONITORING:           status_clr = C'46,204,113'; break;
+      case EDDY_STATE_PROTECTION_TRIGGERED: status_clr = C'231,76,60';  break;
+      case EDDY_STATE_LIQUIDATING:          status_clr = C'231,76,60';  break;
+      case EDDY_STATE_BLOCKED:              status_clr = C'243,156,18'; break;
+      case EDDY_STATE_REOPENING:            status_clr = clrGold;       break;
+      default:                              status_clr = clrGold;       break;
+   }
+   if(!g_is_owner || !g_safe_to_operate)
+   {
+      status_str = "FAIL-CLOSED";
+      status_clr = clrRed;
+   }
+
+   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+
+   // Cartão Detalhado Nativo (W=320, H=310)
+   UI_SetRect(EDDY_UI_PREFIX + "Det_Bg", 0, 0, 320, 310, C'20,24,33', C'0,150,214');
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Title", 12, 10, "EDDYTRADER - DETALHES", C'0,180,216', 9, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ver", 220, 11, StringFormat("v%s [%s]", EDDY_VERSION, mode_str), C'130,140,155', 7);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Lbl", 12, 32, "Estado FSM:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Val", 100, 32, StringFormat("%s (%s)", EnumToString(g_current_state), status_str), status_clr, 8, true);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Lbl", 12, 52, "Janela / Base:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Val", 100, 52, StringFormat("J%d | Bn: %.2f %s", g_window_id, g_baseline, curr), clrWhite, 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Lbl", 12, 72, "Limite Perda:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Val", 100, 72, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Lbl", 12, 94, "Realizado Hoje:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Val", 100, 94, StringFormat("%+.2f %s", R_day, curr), (R_day >= 0 ? C'46,204,113' : C'231,76,60'), 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Lbl", 12, 114, "Flutuante F(t):", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Val", 100, 114, StringFormat("%+.2f %s", F, curr), (F >= 0 ? C'46,204,113' : C'231,76,60'), 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Lbl", 12, 134, "Consolidado D(t):", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 100, 134, StringFormat("%+.2f %s", D, curr), res_clr, 8, true);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Lbl", 12, 154, "Res. Janela Wn:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 100, 154, StringFormat("%+.2f %s", W, curr), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Lbl", 12, 176, "Protecao / ID:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Val", 100, 176, (g_protection_event_id > 0 ? StringFormat("Evt #%I64u", g_protection_event_id) : "Nenhuma (Nominal)"), prot_clr, 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Lock_Lbl", 12, 196, "Bloqueio:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Lock_Val", 100, 196, lock_str, prot_clr, 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ops_Lbl", 12, 216, "Exposicao:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Ops_Val", 100, 216, StringFormat("%d pos / %d ord", PositionsTotal(), OrdersTotal()), C'180,190,205', 8);
+
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Inst_Lbl", 12, 236, "Instancia:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Inst_Val", 100, 236, StringFormat("#%I64u (Owner: %s)", g_instance_id, (g_is_owner ? "SIM" : "NAO")), (g_is_owner ? clrWhite : clrRed), 8);
+
+   if(!g_is_owner || !g_safe_to_operate)
+   {
+      UI_SetLabel(EDDY_UI_PREFIX + "Det_Warn", 12, 256, "FAIL-CLOSED: NEGOCIACAO BLOQUEADA", clrRed, 8, true);
+   }
+   else
+   {
+      UI_SetLabel(EDDY_UI_PREFIX + "Det_Warn", 12, 256, StringFormat("Conta: %I64u | Servidor: %s", g_account_login, AccountInfoString(ACCOUNT_SERVER)), C'130,140,155', 7);
+   }
+
+   // Botão de Retorno Garantido e Conspícuo ao Modo Compacto
+   UI_SetButton(EDDY_UI_PREFIX + "Det_Btn_Back", 12, 276, 296, 24, "[ <- VOLTAR AO RESUMO ]", C'0,122,204', clrWhite, 8, true);
+
+   ChartRedraw(0);
 }
 
 void RenderOffHUD()
@@ -1745,20 +1793,22 @@ void OnChartEvent(const int id,
       }
 
       // Botão DETALHES no HUD ou retorno no Detalhado
-      if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Details" || sparam == EDDY_UI_PREFIX + "Btn_Mode")
+      if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Details" || sparam == EDDY_UI_PREFIX + "Det_Btn_Back" || sparam == EDDY_UI_PREFIX + "Btn_Mode")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
          if(g_hud_mode == EDDY_HUD_COMPACT)
          {
             UI_CloseConfigDialog();
+            UI_DeleteHUD();
             g_hud_mode = EDDY_HUD_DETAILED;
+            Comment("");
          }
          else
          {
+            UI_DeleteDetailed();
             g_hud_mode = EDDY_HUD_COMPACT;
             Comment("");
          }
-         UI_DeleteAll();
          UpdateHUD();
          return;
       }
