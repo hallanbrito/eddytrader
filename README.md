@@ -176,9 +176,10 @@ O Disciplinador Trader foi homologado tecnicamente no MetaTrader 5 build 6193.
 
 ```text
 Versão:          1.0.0-rc3 (Preparada, Não Publicada)
-Build:           0 errors / 0 warnings (7 alvos compilados)
-Regressão:       67 / 67 PASS (68 asserções formais)
+Build:           0 errors / 0 warnings (9 alvos compilados)
+Regressão:       75 / 75 PASS (76 asserções formais)
 Teste Visual:    11 / 11 PASS (Automação de interface no Strategy Tester)
+Restart Demo:    10 / 10 PASS (Automação em Demo: probe_demo_restart_w10_2.mq5)
 W07:             Homologado com ressalva em conta Demo
 LIVE-01:         Pendente — DEMO ONLY
 COMPAT-01:       Pendente (Lab pronto: tests/probe_external_ea_w10.mq5) — DEMO ONLY

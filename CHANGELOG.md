@@ -24,11 +24,21 @@ Terceiro Release Candidate — W10 Fundação do Disciplinador Trader, HUD Adapt
 - catalogação formal da lacuna de especificação [GAP-007](docs/08-RISCOS-E-QUESTOES-ABERTAS.md#gap-007--proteção-monotônica-de-stop-loss-sl-lock) contendo as 12 questões empíricas para o Spike Técnico da W11 (reafirmando que a funcionalidade de SL Lock **NÃO foi implementada na W10**);
 - script automatizado de teste visual `tests/test_visual_w10.mq5` validando 11 transições dinâmicas de interface no Strategy Tester.
 
+### Corrigido (W10.2)
+
+- correção cirúrgica do falso `FAIL-CLOSED` exibido no HUD após reinicialização/reload do EA durante estados de proteção ativos (`BLOCKED`, `LIQUIDATING`, `PROTECTION_TRIGGERED`, `REOPENING`);
+- restauração explícita da saúde operacional (`g_safe_to_operate = true`) ao validar a integridade dos metadados recuperados pós-restart, assegurando que o HUD exiba `PROTEÇÃO ATIVA` (laranja) em vez de `FAIL-CLOSED` (vermelho);
+- preservação estrita de todas as garantias de bloqueio operacional, rejeição de alteração de limites e neutralização reativa de intervenções manuais durante `BLOCKED`;
+- preservação total de casos reais de `FAIL-CLOSED` (perda de ownership, baseline ausente em $J \ge 1$ ou erro crítico de gravação de GlobalVariables);
+- adição dos testes formais `W10R-11` a `W10R-18` na suíte de regressão (elevando para 75/75 PASS);
+- adição do probe automatizado `tests/probe_demo_restart_w10_2.mq5` validando 10/10 passos do protocolo de restart em Conta Demo.
+
 ### Validação
 
-- build oficial (`scripts/build.ps1`): **0 errors / 0 warnings** em todos os 7 alvos;
-- bateria de regressão formal expandida para **67/67 PASS** (68 asserções no total, cobrindo `W10R-01` a `W10R-10`);
+- build oficial (`scripts/build.ps1`): **0 errors / 0 warnings** em todos os 9 alvos;
+- bateria de regressão formal expandida para **75/75 PASS** (cobrindo `W10R-01` a `W10R-18`);
 - validação visual automatizada no Strategy Tester: **11/11 PASS**;
+- validação automatizada de restart em Demo: **10/10 PASS**;
 - documentação completa harmonizada sob os preceitos do Método C.H.
 
 ### Pendente

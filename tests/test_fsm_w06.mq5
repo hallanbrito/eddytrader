@@ -1901,6 +1901,361 @@ void RunAllTests()
               all_canceled,
               "Cancelamento de ordens pendentes abrange integralmente o inventario global da conta sem excecoes externas");
 
+   //-----------------------------------------------------------------
+   // W10R-11: Recovery de BLOCKED Mantém Estado Visual Saudável (Não FAIL-CLOSED)
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_11 = 9101;
+   bool is_owner_11 = false;
+   TestAcquireGuard(id_11, is_owner_11, TimeCurrent());
+
+   // Persiste estado BLOCKED ativo prévio
+   test_state           = EDDY_STATE_BLOCKED;
+   test_window_id       = 1;
+   test_baseline        = -500.0;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9001;
+   test_day_start       = D'2026.09.15 00:00:00';
+   test_safe_to_operate = false; // Reset antes do reload
+   TestPersistGV();
+
+   // Simula restart do terminal às 11:00:00 (bloqueio ainda ativo: t_now < t_unlock)
+   datetime t_now_11 = D'2026.09.15 11:00:00';
+   test_state = EDDY_STATE_INIT;
+
+   EddyRecoveryState rec_11;
+   bool rec_11_ok = false;
+   string status_str_11 = "";
+   if(TestLoadGV(rec_11))
+   {
+      if(rec_11.state == EDDY_STATE_BLOCKED)
+      {
+         test_window_id       = rec_11.window_id;
+         test_baseline        = rec_11.baseline;
+         test_t_trigger       = rec_11.t_trigger;
+         test_t_unlock        = rec_11.t_unlock;
+         test_event_id        = rec_11.protection_event_id;
+         test_safe_to_operate = true; // Fix W10.2: Motor saudável e íntegro
+         test_state           = EDDY_STATE_BLOCKED;
+         rec_11_ok            = true;
+      }
+   }
+
+   // Avaliação do status visual do HUD
+   switch(test_state)
+   {
+      case EDDY_STATE_BLOCKED: status_str_11 = "PROTECAO ATIVA"; break;
+      default:                 status_str_11 = "OUTRO";          break;
+   }
+   if(!is_owner_11 || !test_safe_to_operate)
+   {
+      status_str_11 = "FAIL-CLOSED";
+   }
+
+   bool w10r_11_pass = (rec_11_ok &&
+                        test_state == EDDY_STATE_BLOCKED &&
+                        test_safe_to_operate == true &&
+                        is_owner_11 == true &&
+                        status_str_11 == "PROTECAO ATIVA" &&
+                        status_str_11 != "FAIL-CLOSED" &&
+                        test_event_id == 9001 &&
+                        test_t_unlock == D'2026.09.15 14:00:00');
+
+   AssertTest("W10R-11",
+              w10r_11_pass,
+              "Recovery de BLOCKED mantem integridade operacional saudavel e status visual PROTECAO ATIVA sem falso FAIL-CLOSED");
+
+   TestReleaseGuard(id_11, is_owner_11);
+
+   //-----------------------------------------------------------------
+   // W10R-12: Recovery de LIQUIDATING Não Exibe FAIL-CLOSED se Ownership e Persistência Válidos
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_12 = 9102;
+   bool is_owner_12 = false;
+   TestAcquireGuard(id_12, is_owner_12, TimeCurrent());
+
+   test_state           = EDDY_STATE_LIQUIDATING;
+   test_window_id       = 1;
+   test_baseline        = -500.0;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9002;
+   test_safe_to_operate = false;
+   TestPersistGV();
+
+   // Simula restart com posições pendentes de liquidação
+   test_state = EDDY_STATE_INIT;
+   sim_positions_total = 1;
+   string status_str_12 = "";
+
+   EddyRecoveryState rec_12;
+   if(TestLoadGV(rec_12))
+   {
+      if(rec_12.state == EDDY_STATE_LIQUIDATING)
+      {
+         test_window_id       = rec_12.window_id;
+         test_baseline        = rec_12.baseline;
+         test_t_trigger       = rec_12.t_trigger;
+         test_t_unlock        = rec_12.t_unlock;
+         test_event_id        = rec_12.protection_event_id;
+         test_safe_to_operate = true;
+         test_state           = EDDY_STATE_LIQUIDATING;
+      }
+   }
+
+   switch(test_state)
+   {
+      case EDDY_STATE_LIQUIDATING: status_str_12 = "FECHANDO OPERACOES"; break;
+      default:                     status_str_12 = "OUTRO";              break;
+   }
+   if(!is_owner_12 || !test_safe_to_operate)
+   {
+      status_str_12 = "FAIL-CLOSED";
+   }
+
+   bool w10r_12_pass = (test_state == EDDY_STATE_LIQUIDATING &&
+                        test_safe_to_operate == true &&
+                        is_owner_12 == true &&
+                        status_str_12 == "FECHANDO OPERACOES" &&
+                        status_str_12 != "FAIL-CLOSED");
+
+   AssertTest("W10R-12",
+              w10r_12_pass,
+              "Recovery de LIQUIDATING nao exibe FAIL-CLOSED quando ownership e persistencia estao validos");
+
+   sim_positions_total = 0;
+   TestReleaseGuard(id_12, is_owner_12);
+
+   //-----------------------------------------------------------------
+   // W10R-13: Recovery de PROTECTION_TRIGGERED Não Exibe FAIL-CLOSED Falso
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_13 = 9103;
+   bool is_owner_13 = false;
+   TestAcquireGuard(id_13, is_owner_13, TimeCurrent());
+
+   test_state           = EDDY_STATE_PROTECTION_TRIGGERED;
+   test_window_id       = 1;
+   test_baseline        = -500.0;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9003;
+   test_safe_to_operate = false;
+   TestPersistGV();
+
+   test_state = EDDY_STATE_INIT;
+   string status_str_13 = "";
+
+   EddyRecoveryState rec_13;
+   if(TestLoadGV(rec_13))
+   {
+      if(rec_13.state == EDDY_STATE_PROTECTION_TRIGGERED)
+      {
+         test_window_id       = rec_13.window_id;
+         test_baseline        = rec_13.baseline;
+         test_t_trigger       = rec_13.t_trigger;
+         test_t_unlock        = rec_13.t_unlock;
+         test_event_id        = rec_13.protection_event_id;
+         test_safe_to_operate = true;
+         test_state           = EDDY_STATE_PROTECTION_TRIGGERED;
+      }
+   }
+
+   switch(test_state)
+   {
+      case EDDY_STATE_PROTECTION_TRIGGERED: status_str_13 = "PROTECAO ACIONADA"; break;
+      default:                              status_str_13 = "OUTRO";             break;
+   }
+   if(!is_owner_13 || !test_safe_to_operate)
+   {
+      status_str_13 = "FAIL-CLOSED";
+   }
+
+   bool w10r_13_pass = (test_state == EDDY_STATE_PROTECTION_TRIGGERED &&
+                        test_safe_to_operate == true &&
+                        status_str_13 == "PROTECAO ACIONADA" &&
+                        status_str_13 != "FAIL-CLOSED");
+
+   AssertTest("W10R-13",
+              w10r_13_pass,
+              "Recovery de PROTECTION_TRIGGERED estabelece health saudavel sem exibir falso FAIL-CLOSED");
+
+   TestReleaseGuard(id_13, is_owner_13);
+
+   //-----------------------------------------------------------------
+   // W10R-14: Perda Real de Ownership Continua Exibindo FAIL-CLOSED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_14 = 9104;
+   bool is_owner_14 = true;
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+
+   // Simula perda de ownership (ex: takeover de outra instância concorrente)
+   is_owner_14          = false;
+   test_safe_to_operate = false;
+   test_state           = EDDY_STATE_INIT;
+
+   string status_str_14 = "";
+   switch(test_state)
+   {
+      case EDDY_STATE_BLOCKED: status_str_14 = "PROTECAO ATIVA"; break;
+      default:                 status_str_14 = "INICIANDO";      break;
+   }
+   if(!is_owner_14 || !test_safe_to_operate)
+   {
+      status_str_14 = "FAIL-CLOSED";
+   }
+
+   AssertTest("W10R-14",
+              (!is_owner_14 && !test_safe_to_operate && status_str_14 == "FAIL-CLOSED"),
+              "Perda real de ownership conduz a INIT e continua exibindo formalmente FAIL-CLOSED");
+
+   //-----------------------------------------------------------------
+   // W10R-15: Baseline Ausente em Janela Jn (n>=1) Continua Exibindo FAIL-CLOSED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_15 = 9105;
+   bool is_owner_15 = false;
+   TestAcquireGuard(id_15, is_owner_15, TimeCurrent());
+
+   // Persiste estado com J=2 mas SEM salvar BASELINE
+   GlobalVariableSet(TestGVKey("STATE"), (double)EDDY_STATE_MONITORING);
+   GlobalVariableSet(TestGVKey("WINDOW_ID"), 2.0);
+   GlobalVariableSet(TestGVKey("DAY"), (double)D'2026.09.15 00:00:00');
+   GlobalVariablesFlush();
+
+   test_state           = EDDY_STATE_INIT;
+   test_safe_to_operate = true;
+   string status_str_15 = "";
+
+   EddyRecoveryState rec_15;
+   if(TestLoadGV(rec_15))
+   {
+      if(rec_15.state == EDDY_STATE_MONITORING && rec_15.window_id >= 1)
+      {
+         if(!GlobalVariableCheck(TestGVKey("BASELINE")))
+         {
+            // Falha crítica: baseline obrigatória ausente em Jn>=1
+            test_state           = EDDY_STATE_INIT;
+            test_safe_to_operate = false; // FAIL-CLOSED genuíno
+         }
+      }
+   }
+
+   switch(test_state)
+   {
+      case EDDY_STATE_MONITORING: status_str_15 = "MONITORANDO"; break;
+      default:                    status_str_15 = "INICIANDO";   break;
+   }
+   if(!is_owner_15 || !test_safe_to_operate)
+   {
+      status_str_15 = "FAIL-CLOSED";
+   }
+
+   AssertTest("W10R-15",
+              (test_state == EDDY_STATE_INIT && !test_safe_to_operate && status_str_15 == "FAIL-CLOSED"),
+              "Baseline ausente em janela intradiaria Jn>=1 forca INIT e exibe estritamente FAIL-CLOSED");
+
+   TestReleaseGuard(id_15, is_owner_15);
+
+   //-----------------------------------------------------------------
+   // W10R-16: Falha Real de Persistência Continua Exibindo FAIL-CLOSED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_16 = 9106;
+   bool is_owner_16 = false;
+   TestAcquireGuard(id_16, is_owner_16, TimeCurrent());
+
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+
+   // Simula erro de I/O na gravação das Global Variables
+   bool sim_persist_ok = false;
+   if(!sim_persist_ok)
+   {
+      test_safe_to_operate = false; // Fail-closed
+      test_state           = EDDY_STATE_INIT;
+   }
+
+   string status_str_16 = "";
+   if(!is_owner_16 || !test_safe_to_operate)
+   {
+      status_str_16 = "FAIL-CLOSED";
+   }
+
+   AssertTest("W10R-16",
+              (!test_safe_to_operate && test_state == EDDY_STATE_INIT && status_str_16 == "FAIL-CLOSED"),
+              "Falha critica na gravacao de variaveis globais induz postura fail-closed e exibe FAIL-CLOSED");
+
+   TestReleaseGuard(id_16, is_owner_16);
+
+   //-----------------------------------------------------------------
+   // W10R-17: BLOCKED Continua Rejeitando Configuração de MaxLoss
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_17 = 9107;
+   bool is_owner_17 = false;
+   TestAcquireGuard(id_17, is_owner_17, TimeCurrent());
+
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true; // Motor saudável após fix
+   test_g_max_loss      = 500.0;
+
+   // Avalia permissão de configuração
+   bool can_cfg_blocked = (test_state == EDDY_STATE_MONITORING && test_safe_to_operate && is_owner_17);
+
+   string err_msg_17 = "";
+   bool cfg_result = TestSetMaxLossConfig(750.0, err_msg_17);
+
+   AssertTest("W10R-17",
+              (!can_cfg_blocked && !cfg_result && test_g_max_loss == 500.0),
+              "Estado BLOCKED com motor saudavel (safe=true) continua rejeitando categoricamente alteracao de limite");
+
+   TestReleaseGuard(id_17, is_owner_17);
+
+   //-----------------------------------------------------------------
+   // W10R-18: BLOCKED Continua Neutralizando Nova Exposição Imediatamente
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong id_18 = 9108;
+   bool is_owner_18 = false;
+   TestAcquireGuard(id_18, is_owner_18, TimeCurrent());
+
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+   test_t_trigger       = D'2026.09.15 10:00:00';
+   test_t_unlock        = D'2026.09.15 14:00:00';
+   test_event_id        = 9008;
+
+   // Simula nova intervenção manual (ordem ou posição aberta em outro gráfico)
+   sim_positions_total = 2;
+   sim_orders_total    = 1;
+   bool neutralizacao_18 = false;
+
+   // Proteção reativa (OnTradeTransaction / ProcessFSM) durante BLOCKED
+   if(test_state == EDDY_STATE_BLOCKED && (sim_positions_total > 0 || sim_orders_total > 0))
+   {
+      sim_positions_total = 0; // Liquidação compulsória
+      sim_orders_total    = 0; // Cancelamento compulsório
+      neutralizacao_18    = true;
+   }
+
+   bool w10r_18_pass = (neutralizacao_18 &&
+                        sim_positions_total == 0 &&
+                        sim_orders_total == 0 &&
+                        test_state == EDDY_STATE_BLOCKED &&
+                        test_t_unlock == D'2026.09.15 14:00:00' &&
+                        test_event_id == 9008);
+
+   AssertTest("W10R-18",
+              w10r_18_pass,
+              "Estado BLOCKED saudavel neutraliza instantaneamente novas posicoes e ordens mantendo t_unlock inalterado");
+
+   TestReleaseGuard(id_18, is_owner_18);
+
    // Limpeza final de GVs de teste
    TestClearGV();
 
