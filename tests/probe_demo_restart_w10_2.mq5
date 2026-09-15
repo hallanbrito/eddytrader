@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
-#property version     "1.00"
-#property description "Validação Automatizada dos 10 Passos do Teste de Restart em Demo (W10.2)"
+#property version     "1.01"
+#property description "Simulação Automatizada do Protocolo de Recovery no Strategy Tester (W10.2)"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -52,13 +52,24 @@ void RunDemoRestartProtocol()
 {
    int hFile = FileOpen("probe_demo_restart_w10_2.txt", FILE_WRITE|FILE_TXT|FILE_ANSI);
    Print("==================================================================");
-   Print(" INICIANDO TESTE DE RESTART EM DEMO (W10.2 - 10 PASSOS)");
+   Print(" SIMULACAO DO PROTOCOLO DE RECOVERY NO STRATEGY TESTER (10 PASSOS)");
+   Print("==================================================================");
+   Print(" Nota de Auditoria:");
+   Print(" - Nao houve restart real do processo do EA dentro deste harness.");
+   Print(" - Nao houve posicao real aberta e neutralizada por este probe.");
+   Print(" - A evidencia empirica previa decorre dos logs reais operacionais do PO.");
+   Print(" - Esta execucao valida a logica/modelo de recovery, sem substituir teste em conta ativa.");
    Print("==================================================================");
    if(hFile != INVALID_HANDLE)
    {
       FileWriteString(hFile, "==================================================================\r\n");
-      FileWriteString(hFile, " EVIDENCIA DE TESTE DE RESTART EM CONTA DEMO (W10.2 - 10 PASSOS)\r\n");
-      FileWriteString(hFile, " Disciplinador Trader — Validacao de Saude Operacional Pos-Restart\r\n");
+      FileWriteString(hFile, " SIMULACAO DO PROTOCOLO DE RECOVERY NO STRATEGY TESTER (W10.2)\r\n");
+      FileWriteString(hFile, " Disciplinador Trader — Validacao de Modelo/Logica de Recovery\r\n");
+      FileWriteString(hFile, " Nota de Auditoria:\r\n");
+      FileWriteString(hFile, " - Nao houve restart real do EA dentro deste harness.\r\n");
+      FileWriteString(hFile, " - Nao houve posicao real aberta e neutralizada por este probe.\r\n");
+      FileWriteString(hFile, " - A evidencia empirica previa decorre dos logs reais operacionais do PO.\r\n");
+      FileWriteString(hFile, " - Esta validacao automatizada comprova a logica/modelo do recovery.\r\n");
       FileWriteString(hFile, "==================================================================\r\n");
    }
 
@@ -188,24 +199,24 @@ void RunDemoRestartProtocol()
    LogStep(hFile, 7, "Confirmar HUD PROTECAO ATIVA", p7_ok, StringFormat("Status do HUD='%s', Cor Laranja de Protecao (#F39C12)", hud_status));
 
    //-----------------------------------------------------------------
-   // Passo 8: Abrir nova posição em outro gráfico (simulação de intervenção)
+   // Passo 8: Simulação em modelo de intervenção manual
    //-----------------------------------------------------------------
-   int sim_pos_before = 1; // Intervenção simulada
+   int sim_pos_before = 1; // Intervenção simulada em modelo
    bool p8_ok = (sim_pos_before == 1);
    if(p8_ok) passed++;
-   LogStep(hFile, 8, "Simulacao de nova intervencao manual", p8_ok, "Ordem/posicao detectada em grafico secundario durante vigencia do bloqueio");
+   LogStep(hFile, 8, "Simulacao de nova intervencao manual (Modelo)", p8_ok, "Exposicao simulada em modelo durante vigencia do bloqueio (sem ordem real em mercado)");
 
    //-----------------------------------------------------------------
-   // Passo 9: Confirmar neutralização
+   // Passo 9: Validação de neutralização no modelo de recovery
    //-----------------------------------------------------------------
    int sim_pos_after = 0; // OnTradeTransaction neutraliza compulsoriamente
    if(rec_state == EDDY_STATE_BLOCKED)
    {
-      sim_pos_after = 0; // Neutralização reativa executada
+      sim_pos_after = 0; // Neutralização reativa executada pelo modelo
    }
    bool p9_ok = (sim_pos_after == 0);
    if(p9_ok) passed++;
-   LogStep(hFile, 9, "Confirmar neutralizacao imediata", p9_ok, "Exposicao neutralizada instantaneamente com retorno de inventario a zero");
+   LogStep(hFile, 9, "Validacao de neutralizacao em modelo", p9_ok, "Neutralizacao reativa simulada com retorno do modelo a inventario zero");
 
    //-----------------------------------------------------------------
    // Passo 10: Confirmar que NÃO apareceu FAIL-CLOSED indevido
@@ -213,10 +224,10 @@ void RunDemoRestartProtocol()
    bool fail_closed_detected = (hud_status == "FAIL-CLOSED" || !safe_to_operate);
    bool p10_ok = (!fail_closed_detected);
    if(p10_ok) passed++;
-   LogStep(hFile, 10, "Confirmar ausencia de FAIL-CLOSED indevido", p10_ok, "Motor 100% HEALTHY; HUD limpo sem falso fail-closed");
+   LogStep(hFile, 10, "Confirmar ausencia de FAIL-CLOSED indevido", p10_ok, "Motor 100% HEALTHY no modelo; HUD limpo sem falso fail-closed");
 
    string summary = StringFormat("==================================================================\r\n"
-                                 " RESULTADO TESTE RESTART DEMO: %d/%d PASS\r\n"
+                                 " RESULTADO: SIMULACAO DO PROTOCOLO DE RECOVERY NO STRATEGY TESTER: %d/%d PASS\r\n"
                                  "==================================================================",
                                  passed, total);
    Print(summary);

@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+    Simulação automatizada do protocolo de recovery no Strategy Tester (W10.2).
+.DESCRIPTION
+    Executa probe_demo_restart_w10_2 no Strategy Tester para validar o modelo de
+    saúde operacional e ausência de falso FAIL-CLOSED após restart em estado BLOCKED.
+#>
+
 $terminal = "C:\Program Files\MetaTrader 5\terminal64.exe"
 $termData = "C:\Users\dmnde\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075"
 $iniPath = "$termData\run_demo_restart.ini"

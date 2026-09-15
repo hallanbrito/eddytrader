@@ -31,14 +31,14 @@ Terceiro Release Candidate — W10 Fundação do Disciplinador Trader, HUD Adapt
 - preservação estrita de todas as garantias de bloqueio operacional, rejeição de alteração de limites e neutralização reativa de intervenções manuais durante `BLOCKED`;
 - preservação total de casos reais de `FAIL-CLOSED` (perda de ownership, baseline ausente em $J \ge 1$ ou erro crítico de gravação de GlobalVariables);
 - adição dos testes formais `W10R-11` a `W10R-18` na suíte de regressão (elevando para 75/75 PASS);
-- adição do probe automatizado `tests/probe_demo_restart_w10_2.mq5` validando 10/10 passos do protocolo de restart em Conta Demo.
+- adição do probe automatizado `tests/probe_demo_restart_w10_2.mq5` validando os 10 passos da simulação do protocolo de recovery no Strategy Tester (sem restart empírico do EA no harness e sem ordens reais).
 
 ### Validação
 
 - build oficial (`scripts/build.ps1`): **0 errors / 0 warnings** em todos os 9 alvos;
 - bateria de regressão formal expandida para **75/75 PASS** (cobrindo `W10R-01` a `W10R-18`);
 - validação visual automatizada no Strategy Tester: **11/11 PASS**;
-- validação automatizada de restart em Demo: **10/10 PASS**;
+- simulação automatizada do protocolo de recovery no Strategy Tester: **10/10 PASS** (comprova lógica/modelo do recovery; não substitui teste operacional nem executa restart real do terminal; a evidência empírica account-global decorre dos logs reais do Product Owner);
 - documentação completa harmonizada sob os preceitos do Método C.H.
 
 ### Pendente
