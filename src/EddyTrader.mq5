@@ -1714,11 +1714,12 @@ int OnInit()
          g_t_trigger           = rec.t_trigger;
          g_t_unlock            = rec.t_unlock;
          g_protection_event_id = rec.protection_event_id;
+         g_safe_to_operate     = true; // Motor recuperado com integridade operacional e saudável
 
          // T03: Exposição residual aberta tem precedência absoluta
          if(PositionsTotal() > 0 || OrdersTotal() > 0)
          {
-            PrintFormat("[EddyTrader][WARN] T03: Exposição residual aberta detectada pós-restart durante proteção. Forçando LIQUIDATING.");
+            PrintFormat("[Disciplinador Trader][WARN] T03: Exposição residual aberta detectada pós-restart durante proteção. Forçando LIQUIDATING.");
             g_current_state = EDDY_STATE_LIQUIDATING;
          }
          else
@@ -1726,7 +1727,7 @@ int OnInit()
             if(t_now < g_t_unlock)
             {
                // T02A: Bloqueio ativo mantido
-               PrintFormat("[EddyTrader][INFO] T02A: Bloqueio temporal mantido pós-restart (%d s restantes).",
+               PrintFormat("[Disciplinador Trader][INFO] T02A: Bloqueio temporal mantido pós-restart (%d s restantes).",
                            (int)(g_t_unlock - t_now));
                g_current_state = EDDY_STATE_BLOCKED;
             }
@@ -1736,17 +1737,32 @@ int OnInit()
                if(CheckSafetyConditions())
                {
                   // T02C: Reabertura imediata pós-restart: INIT -> REOPENING -> MONITORING
-                  PrintFormat("[EddyTrader][INFO] T02C: Bloqueio vencido e condições seguras. Conduzindo formalmente INIT -> REOPENING -> MONITORING.");
+                  PrintFormat("[Disciplinador Trader][INFO] T02C: Bloqueio vencido e condições seguras. Conduzindo formalmente INIT -> REOPENING -> MONITORING.");
                   TransitionTo(EDDY_STATE_REOPENING);
                }
                else
                {
                   // T02B: Bloqueio retido por falta de segurança
-                  PrintFormat("[EddyTrader][WARN] T02B: Bloqueio vencido mas ambiente inseguro (pos=%d, ord=%d). Retendo em BLOCKED.",
+                  PrintFormat("[Disciplinador Trader][WARN] T02B: Bloqueio vencido mas ambiente inseguro (pos=%d, ord=%d). Retendo em BLOCKED.",
                               PositionsTotal(), OrdersTotal());
                   g_current_state = EDDY_STATE_BLOCKED;
                }
             }
+         }
+      }
+      else if(rec.state == EDDY_STATE_REOPENING)
+      {
+         g_window_id           = rec.window_id;
+         g_baseline            = rec.baseline;
+         g_safe_to_operate     = true;
+         g_current_state       = EDDY_STATE_REOPENING;
+         if(CheckSafetyConditions())
+         {
+            TransitionTo(EDDY_STATE_REOPENING);
+         }
+         else
+         {
+            g_current_state = EDDY_STATE_BLOCKED;
          }
       }
       else if(rec.state == EDDY_STATE_MONITORING)
@@ -1755,7 +1771,7 @@ int OnInit()
          datetime persisted_day = rec.day_timestamp;
          if(persisted_day < g_day_start)
          {
-            PrintFormat("[EddyTrader][INFO] T05: Novo dia operacional detectado pós-restart (%s < %s). Iniciando J0 com B0=0.",
+            PrintFormat("[Disciplinador Trader][INFO] T05: Novo dia operacional detectado pós-restart (%s < %s). Iniciando J0 com B0=0.",
                         TimeToString(persisted_day, TIME_DATE), TimeToString(g_day_start, TIME_DATE));
             g_current_state   = EDDY_STATE_MONITORING;
             g_window_id       = 0;
@@ -1770,7 +1786,7 @@ int OnInit()
                if(!GlobalVariableCheck(GVKey("BASELINE")))
                {
                   // Postura Fail-Closed (W06-15)
-                  PrintFormat("[EddyTrader][CRITICAL] (FAIL-CLOSED): Janela J%d ativa mas Baseline Bn ausente nas Global Variables! Operações retidas em INIT.",
+                  PrintFormat("[Disciplinador Trader][CRITICAL] (FAIL-CLOSED): Janela J%d ativa mas Baseline Bn ausente nas Global Variables! Operações retidas em INIT.",
                               rec.window_id);
                   g_current_state   = EDDY_STATE_INIT;
                   g_safe_to_operate = false;
@@ -1785,26 +1801,48 @@ int OnInit()
             g_baseline        = rec.baseline;
             g_current_state   = EDDY_STATE_MONITORING;
             g_safe_to_operate = true;
-            PrintFormat("[EddyTrader][INFO] MONITORING reconstituído com sucesso: Janela J%d | Baseline Bn=%.2f",
+            PrintFormat("[Disciplinador Trader][INFO] MONITORING reconstituído com sucesso: Janela J%d | Baseline Bn=%.2f",
                         g_window_id, g_baseline);
          }
       }
+      else if(rec.state == EDDY_STATE_INIT)
+      {
+         g_current_state   = EDDY_STATE_INIT;
+         g_safe_to_operate = false;
+         PrintFormat("[Disciplinador Trader][WARN] (FAIL-CLOSED): Estado persistido prévio era INIT. Mantendo postura fail-closed.");
+      }
       else
       {
-         g_current_state = rec.state;
+         g_current_state   = rec.state;
+         g_safe_to_operate = false;
       }
    }
    else
    {
       // Inicialização limpa (primeira vez na conta)
-      PrintFormat("[EddyTrader][INFO] Inicialização limpa na conta %I64u. Iniciando J0 com B0=0.0", g_account_login);
+      PrintFormat("[Disciplinador Trader][INFO] Inicialização limpa na conta %I64u. Iniciando J0 com B0=0.0", g_account_login);
       g_current_state   = EDDY_STATE_MONITORING;
       g_window_id       = 0;
       g_baseline        = 0.0;
       g_safe_to_operate = true;
    }
 
-   PersistState();
+   if(!PersistState())
+   {
+      PrintFormat("[Disciplinador Trader][CRITICAL] (FAIL-CLOSED): Falha ao persistir estado pós-inicialização! Retendo em INIT.");
+      g_current_state   = EDDY_STATE_INIT;
+      g_safe_to_operate = false;
+   }
+
+   PrintFormat("[Disciplinador Trader][INFO] Reconstituição Concluída: Estado=%s | Health=%s | Owner=#%I64u (is_owner=%s) | EventID=%I64u | Unlock=%s | Janela=J%d | Baseline=%.2f",
+               EnumToString(g_current_state),
+               (g_safe_to_operate ? "HEALTHY" : "FAIL-CLOSED"),
+               g_instance_id,
+               (g_is_owner ? "SIM" : "NAO"),
+               g_protection_event_id,
+               (g_t_unlock > 0 ? TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS) : "NENHUM"),
+               g_window_id,
+               g_baseline);
 
    // 6. Ativação do MillisecondTimer de alta frequência com fallback e contenção segura
    if(!EventSetMillisecondTimer(InpTimerIntervalMs))

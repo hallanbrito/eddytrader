@@ -7,7 +7,7 @@
 [![MT5](https://img.shields.io/badge/MetaTrader%205-MQL5-blue)](https://www.metatrader5.com/)
 ![Version](https://img.shields.io/badge/version-1.0.0--rc3-orange)
 ![Build](https://img.shields.io/badge/build-0%20errors%20%7C%200%20warnings-brightgreen)
-![Tests](https://img.shields.io/badge/regression-67%2F67%20PASS-brightgreen)
+![Tests](https://img.shields.io/badge/regression-75%2F75%20PASS-brightgreen)
 ![Visual Tests](https://img.shields.io/badge/visual%20tests-11%2F11%20PASS-brightgreen)
 
 ## Baixar
@@ -176,9 +176,10 @@ O Disciplinador Trader foi homologado tecnicamente no MetaTrader 5 build 6193.
 
 ```text
 Versão:          1.0.0-rc3 (Preparada, Não Publicada)
-Build:           0 errors / 0 warnings (7 alvos compilados)
-Regressão:       67 / 67 PASS (68 asserções formais)
+Build:           0 errors / 0 warnings (9 alvos compilados)
+Regressão:       75 / 75 PASS (76 asserções formais)
 Teste Visual:    11 / 11 PASS (Automação de interface no Strategy Tester)
+Recovery Test:   10 / 10 PASS (Simulação automatizada do protocolo de recovery no Strategy Tester: probe_demo_restart_w10_2.mq5)
 W07:             Homologado com ressalva em conta Demo
 LIVE-01:         Pendente — DEMO ONLY
 COMPAT-01:       Pendente (Lab pronto: tests/probe_external_ea_w10.mq5) — DEMO ONLY
