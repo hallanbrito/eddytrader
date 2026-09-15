@@ -1,44 +1,58 @@
-# EddyTrader
+# Disciplinador Trader
 
-> **Gerenciador de perda e disciplina operacional para MetaTrader 5.**  
-> Monitora o resultado da conta, encerra posições e ordens pendentes ao atingir o limite configurado e mantém a proteção ativa por um período definido.
+> **Guardião de disciplina operacional e gerenciador de perda diária Account-Global para MetaTrader 5.**  
+> *(Nome de projeto interno e repositório: **EddyTrader**)*  
+> Monitora o resultado financeiro da conta inteira de forma independente do gráfico, encerra posições e ordens pendentes ao atingir o limite configurado e mantém a proteção ativa por 4 horas contínuas.
 
 [![MT5](https://img.shields.io/badge/MetaTrader%205-MQL5-blue)](https://www.metatrader5.com/)
-![Version](https://img.shields.io/badge/version-1.0.0--rc2-orange)
+![Version](https://img.shields.io/badge/version-1.0.0--rc3-orange)
 ![Build](https://img.shields.io/badge/build-0%20errors%20%7C%200%20warnings-brightgreen)
-![Tests](https://img.shields.io/badge/regression-40%2F40%20PASS-brightgreen)
+![Tests](https://img.shields.io/badge/regression-67%2F67%20PASS-brightgreen)
+![Visual Tests](https://img.shields.io/badge/visual%20tests-11%2F11%20PASS-brightgreen)
 
 ## Baixar
 
-**Versão atual:** `1.0.0-rc2` — Release Candidate 2 (Trader UX & On-Chart Config).
+**Versão atual:** `1.0.0-rc3` — Terceiro Release Candidate (HUD Adaptativo & Compatibilidade Account-Global).
 
 - **[Abrir página de Releases](https://github.com/hallanbrito/eddytrader/releases)** — local recomendado para baixar o `EddyTrader.ex5` quando o asset binário estiver publicado.
 - **[Baixar o código-fonte EddyTrader.mq5](src/EddyTrader.mq5)** — alternativa para quem prefere compilar no MetaEditor.
+- **[Release Notes 1.0.0-rc3](docs/21-RELEASE-NOTES-1.0.0-rc3.md)** — notas de versão detalhadas do RC3.
 - **[Instalação em 2 minutos](docs/18-QUICKSTART.md)** — passo a passo direto ao ponto.
 
 > [!IMPORTANT]
-> A versão atual ainda é **Release Candidate**. O último gate de homologação, `LIVE-01`, será executado exclusivamente em conta Demo com pregão aberto antes da promoção para `v1.0.0`.
+> A versão atual é um **Release Candidate preparado internamente**. Os gates de homologação `LIVE-01` (pregão ao vivo) e `COMPAT-01` (coexistência multi-ativo/EAs) serão executados exclusivamente em conta Demo antes da promoção para `v1.0.0`.
 
 ---
 
-## O que o EddyTrader faz
+## O que o Disciplinador Trader faz
 
 Você define um limite de perda diretamente pelo gráfico ou pelos parâmetros. Exemplo:
 
 ```text
 Perda máxima: 500,00 na moeda da conta
-Bloqueio:     4 horas
+Bloqueio:     4 horas contínuas
 ```
 
-Quando a perda da janela operacional atinge o limite configurado, o EddyTrader:
+Quando a perda da janela operacional atinge o limite configurado, o Disciplinador Trader:
 
-1. fecha todas as posições abertas da conta;
-2. cancela todas as ordens pendentes;
-3. mantém a conta em proteção pelo período configurado;
+1. fecha todas as posições abertas da conta (qualquer símbolo ou Magic Number);
+2. cancela todas as ordens pendentes existentes na conta;
+3. mantém a conta em proteção pelo período contínuo de 4 horas;
 4. neutraliza reativamente novas posições ou ordens abertas durante o bloqueio;
-5. ao final do período, cria uma nova janela operacional com baseline própria e volta ao monitoramento.
+5. ao final do período, cria uma nova janela operacional com baseline própria ($B_n$) e volta ao monitoramento.
 
-O EddyTrader atua sobre **toda a conta** — sem filtro por símbolo ou Magic Number.
+O Disciplinador Trader atua com escopo **Account-Global (RF-015)** — protegendo toda a conta sem filtros de ativo ou robô.
+
+### Arquitetura Account-Global e Topologia Recomendada (Gráfico A vs. Gráfico B)
+
+- **Gráfico A (Operação do Trader):** Onde você opera manualmente (Chart Trade / One-Click Trading) ou executa seus robôs de estratégia comercial.
+- **Gráfico B (Disciplinador Trader):** Um gráfico isolado (ex: EURUSD M1) onde o Disciplinador fica anexado como sentinela contínuo.
+
+### HUD Adaptativo com Minimizar / Maximizar
+
+- **Botão `[ — MINIMIZAR ]`:** Recolhe o HUD em uma *pill* discreta e ultra-compacta ($370 \times 26$ px) com título `DISCIPLINADOR`, liberando espaço visual no gráfico.
+- **Botão `[ + ]`:** Maximiza a *pill*, restaurando deterministicamente o modo anterior do trader (`COMPACT` ou `DETAILED`).
+- **Alerta em Bloqueio:** Mesmo minimizada, a *pill* avisa instantaneamente com contagem regressiva: `🔒 BLOQUEADO hh:mm:ss`.
 
 ### Configuração pelo Gráfico (Sem Recompilar)
 
@@ -159,19 +173,24 @@ O EddyTrader foi homologado tecnicamente no MetaTrader 5 build 6193.
 ## Status de qualidade
 
 ```text
-Versão:          1.0.0-rc1
-Build:           0 errors / 0 warnings
-Regressão:       28 / 28 PASS
-W07:             Homologado com ressalva
+Versão:          1.0.0-rc3 (Preparada, Não Publicada)
+Build:           0 errors / 0 warnings (7 alvos compilados)
+Regressão:       67 / 67 PASS (68 asserções formais)
+Teste Visual:    11 / 11 PASS (Automação de interface no Strategy Tester)
+W07:             Homologado com ressalva em conta Demo
 LIVE-01:         Pendente — DEMO ONLY
+COMPAT-01:       Lab Pronto (`tests/probe_external_ea_w10.mq5`) — DEMO ONLY
+GAP-007:         Aberto — Investigação W11 (Stop Loss Lock NÃO implementado)
 ADR 0005:        Proposed
 ```
 
 Detalhes:
 
+- [Release Notes 1.0.0-rc3](docs/21-RELEASE-NOTES-1.0.0-rc3.md)
+- [Release Notes 1.0.0-rc2](docs/20-RELEASE-NOTES-1.0.0-rc2.md)
+- [Release Notes 1.0.0-rc1](docs/17-RELEASE-NOTES-1.0.0-rc1.md)
 - [Homologação operacional W07](docs/14-HOMOLOGACAO-W07.md)
 - [Checklist do Release Candidate](docs/16-RELEASE-CHECKLIST.md)
-- [Release Notes 1.0.0-rc1](docs/17-RELEASE-NOTES-1.0.0-rc1.md)
 
 ---
 

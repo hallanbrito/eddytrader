@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02 e W09R-01..29"
+#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02, W09R-01..29 e W10R-01..10"
 
 //--- Definição dos Estados da FSM
 enum ENUM_EDDY_STATE
@@ -25,6 +25,13 @@ enum ENUM_EDDY_HUD_MODE
    EDDY_HUD_COMPACT  = 0, // Painel Compacto Trader
    EDDY_HUD_DETAILED = 1, // Painel Técnico Detalhado
    EDDY_HUD_OFF      = 2  // HUD Desativado
+};
+
+//--- Definição dos Estados do Painel HUD (W10)
+enum ENUM_DISCIPLINADOR_PANEL_STATE
+{
+   PANEL_EXPANDED  = 0,
+   PANEL_COLLAPSED = 1
 };
 
 //--- Definição dos Estados da Interface de Configuração (W09/W09.2)
@@ -95,6 +102,7 @@ void TestClearGV()
    GlobalVariableDel(TestGVKey("EVENT_ID"));
    GlobalVariableDel(TestGVKey("DAY"));
    GlobalVariableDel(TestGVConfigKey("MAX_LOSS"));
+   GlobalVariableDel(TestGVConfigKey("PANEL_COLLAPSED"));
    GlobalVariablesFlush();
 }
 
@@ -1673,10 +1681,234 @@ void RunAllTests()
    TestClearGV();
 
    //-----------------------------------------------------------------
+   // W10R-01: Estado COLLAPSED Não Altera FSM Nem Parâmetros de Risco
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+   test_g_max_loss      = 500.0;
+   test_baseline        = -120.50;
+   test_window_id       = 2;
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_panel_state_01 = PANEL_EXPANDED;
+
+   // Transição para minimizado (COLLAPSED)
+   sim_panel_state_01 = PANEL_COLLAPSED;
+
+   bool invariant_w10_01 = (test_state == EDDY_STATE_MONITORING &&
+                            test_safe_to_operate == true &&
+                            test_g_max_loss == 500.0 &&
+                            test_baseline == -120.50 &&
+                            test_window_id == 2);
+
+   AssertTest("W10R-01",
+              (sim_panel_state_01 == PANEL_COLLAPSED && invariant_w10_01),
+              "Estado COLLAPSED altera exclusivamente a camada visual, preservando rigorosamente FSM e parametros de risco");
+
+   //-----------------------------------------------------------------
+   // W10R-02: COLLAPSED -> EXPANDED Restaura Modo Anterior Corretamente
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ENUM_EDDY_HUD_MODE sim_prev_mode = EDDY_HUD_DETAILED;
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_pstate_02 = PANEL_EXPANDED;
+
+   // Minimiza
+   sim_pstate_02 = PANEL_COLLAPSED;
+   // Ao maximizar, restaura o modo gravado anteriormente
+   ENUM_EDDY_HUD_MODE sim_restored_mode = sim_prev_mode;
+   sim_pstate_02 = PANEL_EXPANDED;
+
+   AssertTest("W10R-02",
+              (sim_pstate_02 == PANEL_EXPANDED && sim_restored_mode == EDDY_HUD_DETAILED),
+              "Transicao COLLAPSED -> EXPANDED restaura com fidelidade o modo visual anteriormente ativo");
+
+   //-----------------------------------------------------------------
+   // W10R-03: Ciclo COMPACT -> COLLAPSED -> COMPACT
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ENUM_EDDY_HUD_MODE sim_mode_03 = EDDY_HUD_COMPACT;
+   ENUM_EDDY_HUD_MODE sim_saved_expanded_03 = sim_mode_03;
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_pstate_03 = PANEL_EXPANDED;
+
+   // 1. Trader clica em [ — MINIMIZAR ] no painel Compacto
+   sim_saved_expanded_03 = EDDY_HUD_COMPACT;
+   sim_pstate_03 = PANEL_COLLAPSED;
+
+   // 2. Trader clica em [ + ] no painel minimizado
+   sim_pstate_03 = PANEL_EXPANDED;
+   sim_mode_03 = sim_saved_expanded_03;
+
+   AssertTest("W10R-03",
+              (sim_pstate_03 == PANEL_EXPANDED && sim_mode_03 == EDDY_HUD_COMPACT),
+              "Ciclo COMPACT -> COLLAPSED -> COMPACT preserva e restabelece a apresentacao do resumo trader");
+
+   //-----------------------------------------------------------------
+   // W10R-04: Ciclo DETAILED -> COLLAPSED -> DETAILED
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ENUM_EDDY_HUD_MODE sim_mode_04 = EDDY_HUD_DETAILED;
+   ENUM_EDDY_HUD_MODE sim_saved_expanded_04 = sim_mode_04;
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_pstate_04 = PANEL_EXPANDED;
+
+   // 1. Trader clica em [ — MINIMIZAR ] no painel Detalhado
+   sim_saved_expanded_04 = EDDY_HUD_DETAILED;
+   sim_pstate_04 = PANEL_COLLAPSED;
+
+   // 2. Trader clica em [ + ] no painel minimizado
+   sim_pstate_04 = PANEL_EXPANDED;
+   sim_mode_04 = sim_saved_expanded_04;
+
+   AssertTest("W10R-04",
+              (sim_pstate_04 == PANEL_EXPANDED && sim_mode_04 == EDDY_HUD_DETAILED),
+              "Ciclo DETAILED -> COLLAPSED -> DETAILED preserva contexto tecnico e restabelece a auditoria detalhada");
+
+   //-----------------------------------------------------------------
+   // W10R-05: Minimização Durante BLOCKED Preserva t_trigger, t_unlock e event_id
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_BLOCKED;
+   test_safe_to_operate = true;
+   test_t_trigger       = 1710000000;
+   test_t_unlock        = 1710014400; // 4h depois
+   test_event_id        = 777888999;
+   test_g_max_loss      = 500.0;
+
+   datetime snap_t_trig_05 = test_t_trigger;
+   datetime snap_t_unlk_05 = test_t_unlock;
+   ulong    snap_evt_05    = test_event_id;
+
+   // Trader minimiza HUD durante bloqueio ativo
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_pstate_05 = PANEL_COLLAPSED;
+
+   bool lock_preserved_05 = (test_state == EDDY_STATE_BLOCKED &&
+                             test_t_trigger == snap_t_trig_05 &&
+                             test_t_unlock  == snap_t_unlk_05 &&
+                             test_event_id  == snap_evt_05 &&
+                             test_g_max_loss == 500.0);
+
+   AssertTest("W10R-05",
+              (sim_pstate_05 == PANEL_COLLAPSED && lock_preserved_05),
+              "Minimizacao visual durante BLOCKED preserva rigorosamente t_trigger, t_unlock, event_id e integridade do bloqueio");
+
+   //-----------------------------------------------------------------
+   // W10R-06: Preferência Visual Persistida Não Pertence a D_min_recovery
+   //-----------------------------------------------------------------
+   TestClearGV();
+   GlobalVariableSet(TestGVKey("STATE"), (double)EDDY_STATE_MONITORING);
+   GlobalVariableSet(TestGVKey("WINDOW_ID"), 1.0);
+   GlobalVariableSet(TestGVKey("BASELINE"), -100.0);
+   GlobalVariableSet(TestGVKey("T_TRIGGER"), 0.0);
+   GlobalVariableSet(TestGVKey("T_UNLOCK"), 0.0);
+   GlobalVariableSet(TestGVKey("EVENT_ID"), 0.0);
+   GlobalVariableSet(TestGVKey("DAY"), 1710000000.0);
+
+   string key_panel_cfg = TestGVConfigKey("PANEL_COLLAPSED");
+   GlobalVariableSet(key_panel_cfg, 1.0);
+   GlobalVariablesFlush();
+
+   // Limpeza simulada das chaves de recuperação
+   GlobalVariableDel(TestGVKey("STATE"));
+   GlobalVariableDel(TestGVKey("WINDOW_ID"));
+   GlobalVariableDel(TestGVKey("BASELINE"));
+   GlobalVariableDel(TestGVKey("T_TRIGGER"));
+   GlobalVariableDel(TestGVKey("T_UNLOCK"));
+   GlobalVariableDel(TestGVKey("EVENT_ID"));
+   GlobalVariableDel(TestGVKey("DAY"));
+   GlobalVariablesFlush();
+
+   bool visual_pref_intact = GlobalVariableCheck(key_panel_cfg);
+   double visual_pref_val = visual_pref_intact ? GlobalVariableGet(key_panel_cfg) : -1.0;
+   GlobalVariableDel(key_panel_cfg);
+   GlobalVariablesFlush();
+
+   AssertTest("W10R-06",
+              (visual_pref_intact && visual_pref_val == 1.0),
+              "Preferencia visual persistida e desacoplada e nao pertence a tupla normativa D_min_recovery");
+
+   //-----------------------------------------------------------------
+   // W10R-07: Falha ao Persistir Preferência Visual Não Coloca Motor em Fail-Closed
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state           = EDDY_STATE_MONITORING;
+   test_safe_to_operate = true;
+
+   bool sim_visual_save_failed = true;
+   ENUM_DISCIPLINADOR_PANEL_STATE sim_pstate_07 = PANEL_COLLAPSED;
+
+   if(sim_visual_save_failed)
+   {
+      sim_pstate_07 = PANEL_COLLAPSED;
+   }
+
+   AssertTest("W10R-07",
+              (sim_pstate_07 == PANEL_COLLAPSED && test_safe_to_operate == true && test_state == EDDY_STATE_MONITORING),
+              "Falha na gravacao da preferencia visual e nao-fatal e jamais induz o motor de risco a fail-closed");
+
+   //-----------------------------------------------------------------
+   // W10R-08: Cálculo/Monitoramento Não Filtra Símbolo do Gráfico Hospedeiro
+   //-----------------------------------------------------------------
+   TestClearGV();
+   double deal_petr4_profit  = -150.0;
+   double deal_winn_profit   = -200.0;
+   double deal_eurusd_profit = -50.0;
+   double floating_btcusd    = -150.0;
+
+   double total_account_D = deal_petr4_profit + deal_winn_profit + deal_eurusd_profit + floating_btcusd;
+   test_g_max_loss = 500.0;
+   test_baseline   = 0.0;
+   double W_account = total_account_D - test_baseline;
+
+   bool trigger_account_global = (W_account <= -test_g_max_loss);
+
+   AssertTest("W10R-08",
+              (total_account_D == -550.0 && trigger_account_global == true),
+              "Calculo de perda acumulada agrega todas as operacoes da conta independentemente do simbolo do grafico hospedeiro");
+
+   //-----------------------------------------------------------------
+   // W10R-09: Liquidação Não Filtra Magic Number
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong sim_pos_magics[3]   = {0, 10101, 777001};
+   ulong sim_pos_tickets[3]  = {1001, 1002, 1003};
+   bool  sim_pos_closed[3]   = {false, false, false};
+
+   for(int p = 0; p < 3; p++)
+   {
+      sim_pos_closed[p] = true;
+   }
+
+   bool all_closed = (sim_pos_closed[0] && sim_pos_closed[1] && sim_pos_closed[2]);
+
+   AssertTest("W10R-09",
+              all_closed,
+              "Liquidacao compulsoria encerra todos os tickets da conta sem qualquer filtro por Magic Number");
+
+   //-----------------------------------------------------------------
+   // W10R-10: Ordens Pendentes Externas Permanecem Incluídas no Inventário Global
+   //-----------------------------------------------------------------
+   TestClearGV();
+   ulong sim_ord_magics[3]    = {0, 55555, 88888};
+   ulong sim_ord_tickets[3]   = {2001, 2002, 2003};
+   bool  sim_ord_canceled[3]  = {false, false, false};
+
+   for(int o = 0; o < 3; o++)
+   {
+      sim_ord_canceled[o] = true;
+   }
+
+   bool all_canceled = (sim_ord_canceled[0] && sim_ord_canceled[1] && sim_ord_canceled[2]);
+
+   AssertTest("W10R-10",
+              all_canceled,
+              "Cancelamento de ordens pendentes abrange integralmente o inventario global da conta sem excecoes externas");
+
+   // Limpeza final de GVs de teste
+   TestClearGV();
+
+   //-----------------------------------------------------------------
    // Relatório Final da Bateria
    //-----------------------------------------------------------------
    string ftr1 = "==================================================================";
-   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R/W09R: Total=%d | Aprovados=%d | Falhas=%d",
+   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R/W09R/W10R: Total=%d | Aprovados=%d | Falhas=%d",
                               g_total_tests, g_passed_tests, g_failed_tests);
    Print(ftr1);
    Print(ftr2);

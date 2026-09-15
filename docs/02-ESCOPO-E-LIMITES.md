@@ -1,22 +1,23 @@
 # 02 — Escopo e Limites do Projeto
 
-Este documento delimita formalmente as fronteiras do **EddyTrader**, definindo o que faz parte da entrega, o que não faz parte e o que está expressamente proibido sem decisão formal prévia.
+Este documento delimita formalmente as fronteiras do **Disciplinador Trader** (nome de projeto interno: **EddyTrader**), definindo o que faz parte da entrega, o que não faz parte e o que está expressamente proibido sem decisão formal prévia.
 
 ---
 
 ## 1. Dentro do Escopo (In-Scope)
 
-As seguintes funcionalidades e características constituem o escopo autorizado do EddyTrader:
+As seguintes funcionalidades e características constituem o escopo autorizado do Disciplinador Trader:
 
 1. **Configuração de Parâmetros de Risco:**
-   * Entrada parametrizada do valor monetário do limite diário de perda máxima.
+   * Entrada parametrizada do valor monetário do limite diário de perda máxima (`InpMaxLoss`).
    * Aplicação da regra temporal normativa de bloqueio contínuo por 4 horas a partir do acionamento da proteção.
-2. **Monitoramento Contínuo:**
-   * Acompanhamento do resultado financeiro realizado no período diário.
-   * Acompanhamento do resultado financeiro flutuante (*unrealized profit/loss*) de posições em aberto.
+2. **Monitoramento Contínuo e Escopo Account-Global (RF-015):**
+   * Monitoramento contínuo em nível global de conta, independente do ativo em que o EA esteja anexado ou do gráfico onde o trader opera.
+   * Acompanhamento do resultado financeiro realizado no período diário (todas as operações de todos os símbolos e mágicas).
+   * Acompanhamento do resultado financeiro flutuante (*unrealized profit/loss*) de todas as posições em aberto na conta.
    * Comparação contínua da perda acumulada relevante frente ao limite monetário configurado.
 3. **Liquidação e Cancelamento de Emergência:**
-   * Envio automático de requisições de fechamento a mercado para todas as posições abertas na conta quando a perda ultrapassar ou igualar o limite.
+   * Envio automático de requisições de fechamento a mercado para todas as posições abertas na conta (qualquer ativo, ordem manual ou de robô terceiro) quando a perda ultrapassar ou igualar o limite.
    * Envio automático de requisições de cancelamento para todas as ordens pendentes existentes na conta.
 4. **Imposição e Manutenção de Bloqueio:**
    * Entrada em estado de bloqueio operacional imediatamente após a liquidação.
@@ -48,7 +49,7 @@ Os seguintes itens **não pertencem** ao escopo do EddyTrader em nenhuma de suas
 1. **Abertura de Operações:** O EddyTrader não abre ordens de compra ou venda no mercado.
 2. **Geração de Sinais ou Análise de Mercado:** O sistema não analisa candles, indicadores, fluxo de ordens (*tape reading*), médias móveis ou notícias.
 3. **Gestão de Lucro (*Take Profit* Diário):** O sistema não possui alvos de ganho, metas diárias positivas ou travas de encerramento por lucro atingido.
-4. **Definição de Stop Loss ou Take Profit de Ordens Individuais:** O EA não insere, altera ou gerencia SL/TP de ordens submetidas pelo trader.
+4. **Definição de Stop Loss ou Take Profit Inicial de Estratégia:** O EA não atua como estratégia de trading; não insere ordens com SL/TP calculados automaticamente para auferir lucros. *(Nota de Fronteira: A proteção monotônica passiva de Stop Loss definido pelo trader — impedindo afrouxamento ou remoção — foi catalogada sob o GAP-007 e autorizada exclusivamente como tema de Spike Técnico para a W11, permanecendo rigorosamente fora do escopo de implementação da W10)*.
 5. **Outras Plataformas:** Não há suporte para MetaTrader 4, TradingView, NinjaTrader, ProfitChart ou qualquer outro software de negociação.
 6. **Linguagens Não Nativas:** Nenhuma parte da lógica de produto será escrita em C++, C#, Python, Rust, JavaScript ou qualquer linguagem distinta de MQL5.
 
@@ -60,8 +61,8 @@ Os seguintes itens **não pertencem** ao escopo do EddyTrader em nenhuma de suas
 
 * **Estratégia de entrada ou saída:** regras para tentar auferir lucro no mercado.
 * **Geração de sinais:** indicadores de compra, venda, sobrecompra ou sobrevenda.
-* **Stop Loss automático ou Take Profit automático:** regras para ancorar stops em ordens do trader.
-* **Trailing Stop:** arrasto automático de stop de posições em andamento.
+* **Stop Loss automático ou Take Profit automático de estratégia:** regras preditivas para ancorar stops ou alvos em busca de retorno financeiro. *(A proteção defensiva de SL contra afrouxamento é tema do Spike W11 / GAP-007 e NÃO está autorizada para código na W10)*.
+* **Trailing Stop preditivo:** arrasto dinâmico de stop visando maximizar ganho.
 * **Martingale ou Grid:** aumento de lotes após perda ou distribuição de ordens contra a tendência.
 * **Gerenciamento de lucro:** fechamento por meta financeira positiva ou trailing de patrimônio.
 * **Copy Trading:** replicação de ordens para outras contas ou mestres/escravos.

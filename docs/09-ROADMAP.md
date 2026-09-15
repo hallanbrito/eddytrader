@@ -15,7 +15,12 @@ flowchart TD
     W05 --> W06["W06: Primeiro EA Mínimo e FSM Integrada (CONCLUÍDA)"]
     W06 --> W07["W07: Testes Integrados e Homologação Demo (CONCLUÍDA)"]
     W07 --> W08["W08: Hardening, Operação e Release Candidate (CONCLUÍDA)"]
-    W08 --> LIVE01["Gate LIVE-01: Validação de Neutralização em Pregão Aberto (PENDENTE)"]
+    W08 --> W09["W09: Trader UX, HUD Visual e Persistência (CONCLUÍDA)"]
+    W09 --> W10["W10: Disciplinador Trader, HUD Adaptativo e Account-Global (EM CONCLUSÃO)"]
+    W10 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (FUTURA)"]
+    W11 --> W12["W12: Implementação SL Lock (CONDICIONADA À W11)"]
+    W10 -.-> COMPAT01["Gate COMPAT-01: Homologação Multi-Ativo e EAs Terceiros (DEMO ONLY)"]
+    W08 -.-> LIVE01["Gate LIVE-01: Neutralização em Pregão Aberto (DEMO ONLY - PENDENTE)"]
     LIVE01 --> V10["v1.0.0: Liberação de Produção para Conta Real"]
 ```
 
@@ -118,20 +123,79 @@ flowchart TD
 
 ---
 
-### Gate Final para Produção v1.0.0
-* **Status:** **PENDENTE**
-* **Condição:** Execução com sucesso do teste formal `LIVE-01` exclusivamente em conta Demo com pregão aberto (DEMO ONLY) e consequente transição do `ADR 0005` de `Proposed` para `Accepted`.
+### W09 — Trader UX, HUD Visual e Experiência Operacional
+* **Status:** **CONCLUÍDA (W09.1, W09.2, W09.3 INTEGRADAS)**
+* **Objetivo:** Transformar a experiência visual e cognitiva do operador com:
+  1. Painel HUD visual no gráfico com modos Compacto e Detalhado;
+  2. Toggle dinâmico por clique de mouse (`[ + DETALHES ]` / `[ — RESUMO ]`);
+  3. Alinhamento anti-sobreposição à esquerda com salvaguarda para o painel *One-Click Trading*;
+  4. Persistência de preferências de visualização em Global Variables do Terminal MT5;
+  5. Desacoplamento arquitetural entre falha visual e FSM do motor de risco (falha de HUD nunca causa fail-closed operacional);
+  6. Release Candidate 2 (`1.0.0-rc2`).
+* **Entregáveis:** HUD integrado em `src/EddyTrader.mq5`, bateria de regressão expandida para 57 testes em `tests/test_fsm_w06.mq5`, `docs/19- Trader-UX-HUD.md` e [20 — Release Notes 1.0.0-rc2](file:///C:/Projetos/eddytrader/docs/20-RELEASE-NOTES-1.0.0-rc2.md).
+* **Critério de Conclusão:** 57/57 testes aprovados, build 0 erros / 0 avisos, integração na branch master.
 
 ---
 
-## 3. Rastreabilidade Documental
+### W10 — Fundação do Disciplinador Trader, HUD Adaptativo e Compatibilidade Account-Global
+* **Status:** **W CORRENTE / EM CONCLUSÃO**
+* **Objetivo:** Consolidar a evolução de produto decorrente do feedback de usuário real ("Cobaia"):
+  1. Formalização da identidade pública normativa **"Disciplinador Trader"** mantendo legados internos técnicos intactos (`EddyTrader.mq5`, chaves `EDDY_*`, prefixo de objetos `EddyHUD_*`);
+  2. Implementação do estado minimizado do HUD (`PANEL_EXPANDED` vs `PANEL_COLLAPSED`) com toggle dinâmico `[ — MINIMIZAR ]` / `[ + ]` no canto superior esquerdo e restauração de modo anterior (`COMPACT` ou `DETAILED`);
+  3. Persistência do estado de colapso visual per-account (`EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED`), não-fatal e desacoplada de $\mathbf{D}_{\text{min\_recovery}}$;
+  4. Consolidação da arquitetura *Account-Global* e convivência operacional com Chart Trade / outros EAs em gráficos separados (Requisito `RF-015`);
+  5. Criação do probe laboratorial de convivência `tests/probe_external_ea_w10.mq5` e definição do procedimento de teste `COMPAT-01`;
+  6. Catalogação formal do `GAP-007` para Stop Loss Lock sem codificação prematura na W10;
+  7. Manutenção estrita do motor matemático, FSM e garantias de liquidação intocadas;
+  8. Preparação do Release Candidate 3 (`1.0.0-rc3`).
+* **Entregáveis:** `src/EddyTrader.mq5` atualizado, probe `tests/probe_external_ea_w10.mq5`, teste visual automatizado `tests/test_visual_w10.mq5`, regressão expandida para 67 testes (W10R-01 a W10R-10), [21 — Release Notes 1.0.0-rc3](file:///C:/Projetos/eddytrader/docs/21-RELEASE-NOTES-1.0.0-rc3.md).
+* **Critério de Conclusão:** 67/67 testes aprovados, 11/11 validações visuais automáticas aprovadas, compilação 100% limpa (0 erros, 0 avisos), documentação harmonizada.
+
+---
+
+### W11 — Spike Técnico: Proteção Monotônica de Stop Loss (SL Lock)
+* **Status:** **FUTURA / PLANEJADA**
+* **Objetivo:** Investigar empiricamente em laboratório as 12 questões catalogadas no `GAP-007` a respeito da viabilidade de monitoramento e reversão monotônica de Stop Loss de posições manuais/automáticas.
+* **Entregáveis:** Documento de Spike Técnico dedicado, probe de teste de interceptação/reversão de SL, matriz de viabilidade e riscos de corretora.
+* **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção.
+
+---
+
+### W12 — Implementação de Stop Loss Lock e Proteções Avançadas
+* **Status:** **FUTURA / CONDICIONADA À APROVAÇÃO DA W11**
+* **Objetivo:** Caso o Spike W11 demonstre viabilidade técnica e ausência de riscos críticos de rejeição/throttling de corretora, implementar a proteção monotônica de Stop Loss na conta.
+* **Entregáveis:** Módulo de proteção monotônica de SL, testes de regressão específicos e documentação normativa atualizada.
+* **Critério de Conclusão:** Aprovação dos testes unitários e homologação em conta demo.
+
+---
+
+## 3. Gates Operacionais
+
+### Gate LIVE-01 — Validação de Neutralização em Pregão Aberto
+* **Status:** **PENDENTE (DEMO ONLY)**
+* **Objetivo:** Validar empiricamente a latência e a efetividade da neutralização reativa ponta a ponta em ambiente de mercado aberto com book real e ordens manuais instantâneas.
+* **Condição:** Exclusivamente em conta Demo durante horário regular de pregão. Pré-requisito para transição de `ADR 0005` para `Accepted` e liberação de v1.0.0 final.
+
+### Gate COMPAT-01 — Convivência Multi-Ativo e EAs Terceiros
+* **Status:** **PLANEJADO / LAB PRONTO (DEMO ONLY)**
+* **Objetivo:** Validar empiricamente em conta Demo que o Disciplinador Trader atuando no Gráfico B fecha posições abertas por outros EAs ou Chart Trade manual no Gráfico A assim que a perda da conta atinge o limite diário configurado, sem interrupção de Magic Numbers.
+* **Artefato de Suporte:** `tests/probe_external_ea_w10.mq5`.
+
+---
+
+## 4. Rastreabilidade Documental
 
 * Manifesto: [00 — Manifesto](file:///C:/Projetos/eddytrader/docs/00-MANIFESTO.md)
+* Visão Geral: [01 — Visão Geral](file:///C:/Projetos/eddytrader/docs/01-VISAO-GERAL.md)
 * Escopo e Proibições: [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md)
+* Requisitos do Sistema: [03 — Requisitos](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md)
+* Casos de Uso: [04 — Casos de Uso](file:///C:/Projetos/eddytrader/docs/04-CASOS-DE-USO.md)
 * Regras Normativas: [05 — Regras de Negócio](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md)
+* Arquitetura Conceitual: [06 — Arquitetura Conceitual](file:///C:/Projetos/eddytrader/docs/06-ARQUITETURA-CONCEITUAL.md)
 * Critérios do MVP: [07 — MVP](file:///C:/Projetos/eddytrader/docs/07-MVP.md)
+* Riscos e GAPs: [08 — Riscos e Questões Abertas](file:///C:/Projetos/eddytrader/docs/08-RISCOS-E-QUESTOES-ABERTAS.md)
 * Especificação Matemática: [10 — Especificação Matemática](file:///C:/Projetos/eddytrader/docs/10-ESPECIFICACAO-MATEMATICA.md)
 * Máquina de Estados Finita: [11 — Máquina de Estados](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md)
 * Decisões Arquiteturais: [ADR 0001](file:///C:/Projetos/eddytrader/docs/adr/0001-regras-temporais-e-janelas-de-protecao.md), [ADR 0002](file:///C:/Projetos/eddytrader/docs/adr/0002-composicao-da-perda-operacional.md), [ADR 0003](file:///C:/Projetos/eddytrader/docs/adr/0003-modelo-matematico-de-janelas-e-baseline.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md) e [ADR 0005](file:///C:/Projetos/eddytrader/docs/adr/0005-garantias-tecnicas-mt5-e-estrategia-de-recuperacao.md)
-* Guia Operacional e Release: [15 — Guia Operacional](file:///C:/Projetos/eddytrader/docs/15-GUIA-OPERACIONAL.md), [16 — Checklist de Release](file:///C:/Projetos/eddytrader/docs/16-RELEASE-CHECKLIST.md) e [17 — Release Notes](file:///C:/Projetos/eddytrader/docs/17-RELEASE-NOTES-1.0.0-rc1.md)
+* Guia Operacional e Releases: [15 — Guia Operacional](file:///C:/Projetos/eddytrader/docs/15-GUIA-OPERACIONAL.md), [16 — Checklist de Release](file:///C:/Projetos/eddytrader/docs/16-RELEASE-CHECKLIST.md), [17 — Release Notes 1.0.0-rc1](file:///C:/Projetos/eddytrader/docs/17-RELEASE-NOTES-1.0.0-rc1.md), [20 — Release Notes 1.0.0-rc2](file:///C:/Projetos/eddytrader/docs/20-RELEASE-NOTES-1.0.0-rc2.md) e [21 — Release Notes 1.0.0-rc3](file:///C:/Projetos/eddytrader/docs/21-RELEASE-NOTES-1.0.0-rc3.md)
 

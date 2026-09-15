@@ -1,13 +1,14 @@
 # 04 — Casos de Uso do Sistema
 
-Este documento especifica os Casos de Uso (UC) do **EddyTrader**, detalhando os fluxos operacionais, regras de tempo do servidor, bloqueio contínuo de 4 horas, criação de novas janelas de proteção e contingência de falhas conforme as deliberações da **W02** (incluindo o esclarecimento normativo do Product Owner).
+Este documento especifica os Casos de Uso (UC) do **Disciplinador Trader** (nome de projeto interno: **EddyTrader**), detalhando os fluxos operacionais, regras de tempo do servidor, bloqueio contínuo de 4 horas, convivência account-global em gráficos separados (RF-015), controle adaptativo do HUD e contingência de falhas.
 
 ---
 
 ## 1. Atores do Sistema
 
-* **Operador (Trader):** Usuário que anexa o EA ao gráfico, define os parâmetros de risco e realiza suas operações na conta.
-* **Sistema (EddyTrader EA):** Instância única em MQL5 em execução contínua no terminal MetaTrader 5.
+* **Operador (Trader):** Usuário que anexa o EA ao gráfico, define os parâmetros de risco, controla a visualização do HUD e realiza suas operações na conta (no mesmo gráfico ou em gráficos separados).
+* **Robô Operacional Terceiro (EA Externo):** Algoritmo comercial de execução anexado a outro gráfico na mesma conta.
+* **Sistema (Disciplinador Trader EA):** Instância única em MQL5 em execução contínua no terminal MetaTrader 5 (Gráfico B).
 * **Servidor de Negociação da Corretora:** Infraestrutura da corretora que fornece o relógio oficial do sistema (`TimeCurrent`), executa requisições e mantém o histórico contábil.
 
 ---
@@ -18,13 +19,17 @@ Este documento especifica os Casos de Uso (UC) do **EddyTrader**, detalhando os 
 flowchart LR
     Op["Operador (Trader)"] --> UC01["UC-01: Configurar Parâmetros de Risco"]
     Op --> UC06["UC-06: Tentar Operar em Bloqueio"]
+    Op --> UC09["UC-09: Ajustar Apresentação Visual do HUD"]
     
-    Sys["EddyTrader EA"] --> UC02["UC-02: Monitorar Resultado da Conta"]
+    ExtEA["Robô Terceiro / Chart Trade"] --> UC10["UC-10: Operar em Gráfico Separado"]
+    
+    Sys["Disciplinador Trader EA"] --> UC02["UC-02: Monitorar Resultado Global da Conta"]
     Sys --> UC03["UC-03: Acionar Proteção por Perda"]
-    Sys --> UC04["UC-04: Encerrar Exposições e Ordens"]
+    Sys --> UC04["UC-04: Encerrar Exposições e Ordens Globais"]
     Sys --> UC05["UC-05: Manter Bloqueio Operacional"]
     Sys --> UC07["UC-07: Liberar Operações e Iniciar Nova Janela"]
     Sys --> UC08["UC-08: Tratar Falhas e Reter Proteção"]
+    Sys --> UC10
 ```
 
 ---
@@ -188,3 +193,46 @@ flowchart LR
   5. O EA programa novas tentativas de fechamento nos próximos ciclos.
 * **Pós-condições:** Falhas auditadas, posições viáveis encerradas e estado defensivo retido até resolução das pendências.
 * **Requisitos Relacionados:** [RF-013](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-013), [RN-009](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-009), [11-MAQUINA-DE-ESTADOS.md](file:///C:/Projetos/eddytrader/docs/11-MAQUINA-DE-ESTADOS.md), [ADR 0004](file:///C:/Projetos/eddytrader/docs/adr/0004-maquina-de-estados-e-recuperacao.md), Decisão D16.
+
+---
+
+### UC-09 — Ajustar Apresentação Visual do HUD (Minimizar / Maximizar)
+
+* **Ator Principal:** Operador.
+* **Objetivo:** Alternar a densidade de apresentação visual do HUD no gráfico entre os modos Expandido (Compacto ou Detalhado) e Minimizado (pill discreta), preservando a legibilidade gráfica e as preferências do operador sem afetar o motor de risco.
+* **Pré-condições:** Disciplinador Trader ativo com HUD visível.
+* **Gatilho:** Clique do mouse no botão de controle de visualização (`[ — MINIMIZAR ]` ou `[ + ]`).
+* **Fluxo Principal (Minimizar):**
+  1. O operador clica no botão `[ — MINIMIZAR ]` presente no painel Compacto ou Detalhado.
+  2. O sistema registra o modo expandido atual (`COMPACT` ou `DETAILED`) na variável de memória `g_last_expanded_hud_mode`.
+  3. O sistema altera o estado do painel para `PANEL_COLLAPSED`.
+  4. O sistema destrói os elementos gráficos expandidos e renderiza a pill minimizada (dimensões compactas $370 \times 26$ px) contendo: título curto `DISCIPLINADOR`, status operacional resumido, perda diária atual, limite e botão de expansão `[ + ]`.
+  5. O sistema persiste a preferência visual na variável global do terminal `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED = 1.0` de forma não-fatal (desacoplada de $\mathbf{D}_{\text{min\_recovery}}$).
+* **Fluxo Alternativo (Maximizar):**
+  1. O operador clica no botão `[ + ]` na pill minimizada.
+  2. O sistema altera o estado do painel para `PANEL_EXPANDED`.
+  3. O sistema restaura com precisão o modo expandido previamente ativo (`COMPACT` ou `DETAILED`).
+  4. O sistema persiste a preferência visual `EDDY_<LOGIN>_CONFIG_PANEL_COLLAPSED = 0.0`.
+* **Fluxo durante Bloqueio:**
+  * Se o sistema transitar para `BLOCKED` ou `LIQUIDATING` enquanto minimizado, a pill exibe visualmente `🔒 BLOQUEADO hh:mm:ss` com borda e texto em cor de destaque (amarelo/vermelho), garantindo consciência de proteção sem expandir forçosamente o painel sobre a visão do trader.
+* **Pós-condições:** Apresentação visual ajustada de forma ergonômica; estado do motor de risco e da FSM operacional rigorosamente preservados.
+* **Requisitos Relacionados:** [RF-014](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-014), [RN-010](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-010).
+
+---
+
+### UC-10 — Coexistir com Execução Manual e EAs Terceiros em Gráficos Separados
+
+* **Ator Principal:** Operador / EA Terceiro.
+* **Objetivo:** Permitir ao operador negociar livremente no Gráfico A (manualmente via boletas de clique rápido/Chart Trade ou através de robôs de estratégia comercial com seus próprios Magic Numbers), mantendo o Disciplinador Trader isolado no Gráfico B como guardião global de integridade da conta.
+* **Pré-condições:** Disciplinador Trader anexado ao Gráfico B em estado `MONITORING`.
+* **Gatilho:** Execução de ordens de compra/venda no Gráfico A pelo operador ou EA terceiro.
+* **Fluxo Principal:**
+  1. O operador (ou EA terceiro) emite ordens a mercado ou pendentes no Gráfico A (ex: no mini-índice WIN com Magic 777001).
+  2. O Disciplinador Trader (no Gráfico B, ex: EURUSD) detecta as posições e o impacto financeiro global na conta via eventos transacionais `OnTradeTransaction` e varredura de `AccountInfoDouble(ACCOUNT_PROFIT)`.
+  3. As ordens e operações fluem livremente enquanto o resultado financeiro total estiver estritamente dentro do limite de perda permitido ($W_n(t) > -L$).
+  4. Caso as operações do Gráfico A atinjam o limite de perda estabelecido ($W_n(t) \le -L$), o Disciplinador Trader (Gráfico B) assume compulsoriamente a liquidação:
+     * Encerra a mercado todas as posições abertas no Gráfico A (e em qualquer outro ativo da conta), independente de Magic Number.
+     * Cancela todas as ordens pendentes em todos os ativos da conta.
+     * Entra em estado de bloqueio `BLOCKED` de 4 horas para a conta inteira.
+* **Pós-condições:** Disciplina de conta rigorosamente garantida sem conflito de gráficos ou interferência nos canais de envio de ordens comerciais.
+* **Requisitos Relacionados:** [RF-015](file:///C:/Projetos/eddytrader/docs/03-REQUISITOS.md#rf-015), [RN-004](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-004), [RN-005](file:///C:/Projetos/eddytrader/docs/05-REGRAS-DE-NEGOCIO.md#rn-005).

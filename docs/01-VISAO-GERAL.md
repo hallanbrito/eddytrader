@@ -1,18 +1,29 @@
 # 01 — Visão Geral do Produto
 
-O **EddyTrader** é um Expert Advisor (EA) para **MetaTrader 5 (MT5)** projetado para atuar exclusivamente como um **Gerenciador de Perda Diária** (*Daily Loss Manager*).
+O **Disciplinador Trader** (nome de projeto interno: **EddyTrader**) é um Expert Advisor (EA) para **MetaTrader 5 (MT5)** projetado para atuar exclusivamente como um **Guardião de Disciplina Operacional e Gerenciador de Perda Diária** (*Account-Global Daily Loss & Discipline Guardian*).
 
 ---
 
 ## 1. O Que É
 
-O EddyTrader é um mecanismo de segurança operacional de execução local e contínua dentro do terminal MetaTrader 5. Ele atua como uma salvaguarda automatizada, monitorando a evolução do resultado financeiro da conta do usuário durante a sessão diária e executando medidas defensivas imediatas caso o teto de perda aceitável seja alcançado ou superado.
+O Disciplinador Trader é um mecanismo de segurança operacional de execução local e contínua dentro do terminal MetaTrader 5. Ele atua como uma salvaguarda automatizada e desprovida de emoção, monitorando a evolução do resultado financeiro global da conta durante a sessão diária e executando medidas defensivas compulsórias e imediatas caso o teto de perda aceitável seja violado.
 
-O software opera com foco monocrático: **contenção de risco intradiário**.
+O software opera com foco monocrático: **contenção de risco intradiário e preservação compulsória do capital em nível de conta**.
 
 ---
 
-## 2. Para Quem Existe
+## 2. Arquitetura Account-Global e Convivência Operacional (Gráfico A vs. Gráfico B)
+
+Diferente de robôs convencionais de execução acoplados a um gráfico ou ativo específico, o Disciplinador Trader possui arquitetura **Account-Global**:
+* **Independência de Gráfico e Símbolo:** O Disciplinador Trader monitora todas as posições abertas e ordens pendentes da conta, independentemente do símbolo onde foram emitidas e independentemente do identificador numérico (*Magic Number*).
+* **Topologia Operacional Recomendada:**
+  * **Gráfico A (Execução do Trader):** Gráfico do ativo operado (ex: mini-índice, mini-dólar, pares de FX), onde o trader utiliza o painel *Chart Trade*, boletas de clique rápido (*One-Click Trading*) ou executa outros robôs de estratégia comercial.
+  * **Gráfico B (Guardião Disciplinador):** Gráfico exclusivo (ex: qualquer ativo com cotação ativa em M1), onde o Disciplinador Trader permanece anexado e em vigilância contínua.
+* **HUD Adaptativo e Não-Intrusivo:** Oferece painel gráfico com controle visual adaptativo (estados Expandido e Minimizado), garantindo visibilidade imediata sem bloquear os botões nativos de negociação rápida da plataforma.
+
+---
+
+## 3. Para Quem Existe
 
 O produto destina-se a:
 
@@ -22,7 +33,7 @@ O produto destina-se a:
 
 ---
 
-## 3. Problema Resolvido
+## 4. Problema Resolvido
 
 A ausência de uma trava técnica de perda diária expõe o operador a:
 
@@ -30,17 +41,17 @@ A ausência de uma trava técnica de perda diária expõe o operador a:
 * **Overtrading:** aumento desproporcional no número de ordens com o objetivo de reaver o capital perdido no mesmo dia.
 * **Devolução de lucros ou ruína de conta:** dilapidação do patrimônio construído em meses por incapacidade de parar em um único dia adverso.
 
-O EddyTrader resolve esse problema transferindo o poder de interrupção operacional para um algoritmo desprovido de hesitação, fadiga ou viés psicológico.
+O Disciplinador Trader resolve esse problema transferindo o poder de interrupção operacional para um algoritmo desprovido de hesitação, fadiga ou viés psicológico.
 
 ---
 
-## 4. Fluxo Conceitual
+## 5. Fluxo Conceitual
 
-O ciclo de vida operacional do EddyTrader segue um fluxo contínuo e estrito baseado no horário oficial do servidor:
+O ciclo de vida operacional do Disciplinador Trader segue um fluxo contínuo e estrito baseado no horário oficial do servidor:
 
 ```mermaid
 flowchart TD
-    A["Início / Anexação do EA ao Gráfico"] --> B["Carregar Parâmetros (Limite de Perda e Duração do Bloqueio: 4 Horas)"]
+    A["Início / Anexação do EA ao Gráfico B"] --> B["Carregar Parâmetros (Limite de Perda e Duração do Bloqueio: 4 Horas)"]
     B --> C["Estado: MONITORAMENTO"]
     C --> D{"Prejuízo Relevante >= Limite Configurado?"}
     D -- Não --> E["Aguardar Próximo Tick / Intervalo de Tempo"] --> C
@@ -61,37 +72,35 @@ flowchart TD
 
 ---
 
-## 5. Entradas Principais e Regras Temporais
+## 6. Entradas Principais e Regras Temporais
 
 O produto opera com os seguintes parâmetros normativos:
 
-1. **Limite Máximo de Perda Diária (`Daily Loss Limit`):**
+1. **Limite Máximo de Perda Diária (`Daily Loss Limit` / `InpMaxLoss`):**
    * Valor numérico monetário positivo (ex: `500.00`).
    * Expressa a quantidade monetária máxima (na moeda da conta) que o operador aceita perder no dia.
 2. **Tempo de Bloqueio Operacional:**
    * Duração contínua e relativa de **4 horas** a partir do instante exato de disparo da proteção ($t_{\text{unlock}} = t_{\text{bloqueio}} + 4\text{h}$) no relógio do servidor de negociação.
-   * *(Nota: Substitui a interpretação preliminar de horário fixo absoluto diário)*.
+3. **Parâmetros Visuais de HUD:**
+   * Alinhamento de canto (`InpHudCorner`), offsets verticais/horizontais e suporte a minimizar/maximizar dinâmico com persistência per-account.
 
 ---
 
-## 6. Saídas Principais
+## 7. Saídas Principais
 
-Quando acionado, o EddyTrader gera as seguintes saídas e efeitos colaterais no ambiente MT5:
+Quando acionado, o Disciplinador Trader gera as seguintes saídas e efeitos colaterais no ambiente MT5:
 
-* **Ordens Comerciais de Fechamento:** ordens de fechamento a mercado para liquidar toda e qualquer posição aberta na conta.
+* **Ordens Comerciais de Fechamento:** ordens de fechamento a mercado para liquidar toda e qualquer posição aberta na conta (qualquer símbolo ou magic).
 * **Ordens Comerciais de Cancelamento:** requisições de cancelamento para todas as ordens pendentes (*Buy Limit*, *Sell Limit*, *Buy Stop*, *Sell Stop*, etc.) ativas na conta.
 * **Imposição de Bloqueio:** impedimento de novas negociações durante a vigência do período de 4 horas.
-* **Apresentação Visual em Gráfico:** renderização de informações textuais claras diretamente no gráfico (HUD/Chart Comment) informando:
-  * Motivo do bloqueio (limite atingido);
-  * Posições e ordens processadas;
-  * Instante do acionamento e horário do servidor estipulado para retorno/liberação ($t_{\text{bloqueio}} + 4\text{h}$).
+* **Apresentação Visual em Gráfico (HUD):** renderização de painel visual com modos Expandido (Compacto e Detalhado) e Minimizado, informando estado, baseline, resultado corrente e tempo restante de bloqueio.
 * **Registro em Log Local:** mensagens estruturadas no Diário (*Journal*) do MetaTrader 5 para fins de auditoria e rastreabilidade temporal.
 
 ---
 
-## 7. Estados Principais do Sistema
+## 8. Estados Principais do Sistema
 
-Conceitualmente, o sistema transita entre quatro estados essenciais:
+Conceitualmente, o sistema transita entre quatro estados essenciais da FSM operacional:
 
 | Estado | Descrição | Comportamento Operacional |
 | :--- | :--- | :--- |
@@ -102,18 +111,18 @@ Conceitualmente, o sistema transita entre quatro estados essenciais:
 
 ---
 
-## 8. Relação com o MetaTrader 5
+## 9. Relação com o MetaTrader 5
 
-O EddyTrader opera nativamente dentro da infraestrutura do MetaTrader 5:
+O Disciplinador Trader opera nativamente dentro da infraestrutura do MetaTrader 5:
 
 * **Formato:** compilado exclusivamente como arquivo executável MQL5 (`.ex5`) derivado de código-fonte MQL5 (`.mq5`).
-* **Instalação:** anexado a uma janela de gráfico (*chart*) de qualquer ativo financeiro disponível no terminal.
+* **Instalação:** anexado a uma janela de gráfico (*chart*) de qualquer ativo financeiro disponível no terminal (recomendado Gráfico B).
 * **Ciclo de Eventos:** acionado pelos eventos nativos da plataforma, tais como `OnInit()`, `OnDeinit()`, `OnTick()`, `OnTimer()`, e eventos de negociação como `OnTrade()` / `OnTradeTransaction()`.
 * **Subordinação à Corretora e Terminal:** toda ação de fechamento ou cancelamento está sujeita às regras da corretora (horário de negociação do símbolo, liquidez, requisições aceitas, modo de margem Hedging vs. Netting).
 
 ---
 
-## 9. Rastreabilidade Documental
+## 10. Rastreabilidade Documental
 
 * Origem: Especificação funcional aprovada (Contexto do Produto e Requisitos Funcionais).
 * Detalhamento de Fronteiras: [02 — Escopo e Limites](file:///C:/Projetos/eddytrader/docs/02-ESCOPO-E-LIMITES.md)
