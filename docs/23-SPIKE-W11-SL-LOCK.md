@@ -6,7 +6,7 @@
 
 **GAP:** GAP-007.
 
-**Regra de segurança:** nenhum SL Lock foi implementado em `src/EddyTrader.mq5`. O probe desta W é observacional, bloqueia conta Real/Contest e não chama `OrderSend`, `PositionModify`, `OrderModify`, `PositionClose` ou `OrderDelete`.
+**Regra de segurança:** nenhum SL Lock foi implementado em `src/EddyTrader.mq5`. O probe principal de eventos é estritamente observacional e não envia solicitações comerciais. O probe separado de ordens pendentes é experimental, limitado a conta Demo, exige duas confirmações explícitas e pode enviar/limpar somente os objetos do ensaio.
 
 Esta W existe para reduzir incerteza antes de qualquer proposta de W12. Ela não autoriza implementação produtiva nem altera a promessa atual do Disciplinador Trader.
 
@@ -25,7 +25,7 @@ Esta W existe para reduzir incerteza antes de qualquer proposta de W12. Ela não
 - `research/w11/test_sl_monotonic_w11.mq5`: sete casos puros da classificacao monotonica BUY/SELL, remocao, primeira definicao e ruido inferior a meio tick;
 - `research/w11/probe_pending_order_gate_w11.mq5`: probe Demo-only com escrita de ordens experimentais; implementa gate de ordens pendentes (Buy/Sell Limit, Buy/Sell Stop) com SL e TP anexados; captura ciclo de vida e inventario real pos-ativacao; compilado com 0 erros e 0 warnings; execucao Demo pendente;
 - `research/w11/test_pending_sl_baseline_w11.mq5`: oito casos puros da regra W11-DEC-02 para ordens pendentes (SL anexado -> BASELINE_SET; sem SL -> WAIT_FIRST_SL); compilado com 0 erros e 0 warnings;
-- evidencia operacional preexistente no Journal do MT5 em 2026-09-16, conta Demo ActivTrades, modo Netting.
+- evidencia operacional preexistente no Journal do MT5 em 2026-09-15, conta Demo ActivTrades, modo Netting.
 
 ## 4. Evidência empírica já observada
 
