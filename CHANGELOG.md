@@ -6,6 +6,13 @@ O projeto segue versionamento semântico para releases públicas.
 
 ## [Não publicado]
 
+### Pesquisa (W11 — parcial)
+
+- adicionado probe observacional Demo-only para eventos de Stop Loss, sem qualquer solicitação corretiva ou alteração no EA de produção;
+- formalizada matriz das 12 questões do GAP-007 com distinção entre evidência obtida, hipótese aberta e decisão de produto pendente;
+- classificação monotônica BUY/SELL validada em 7/7 casos puros;
+- viabilidade segura de restauração automática permanece não demonstrada; W12 continua bloqueada pelo critério de conclusão da W11.
+
 ### Corrigido (W10.3)
 
 - HUD Compacto e Minimizado agora exibem o resultado do ciclo ativo $W=D-B_n$, iniciando visualmente em `0,00` após a reabertura;

@@ -18,7 +18,7 @@ flowchart TD
     W08 --> W09["W09: Trader UX, HUD Visual e Persistência (CONCLUÍDA)"]
     W09 --> W10["W10: Disciplinador Trader, HUD Adaptativo e Account-Global (EM CONCLUSÃO)"]
     W10 --> W103["W10.3: Resultado por Ciclo no HUD (CONCLUÍDA)"]
-    W103 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (FUTURA)"]
+    W103 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (EM INVESTIGAÇÃO)"]
     W11 --> W12["W12: Implementação SL Lock (CONDICIONADA À W11)"]
     W10 -.-> COMPAT01["Gate COMPAT-01: Homologação Multi-Ativo e EAs Terceiros (DEMO ONLY)"]
     W08 -.-> LIVE01["Gate LIVE-01: Neutralização em Pregão Aberto (DEMO ONLY - PENDENTE)"]
@@ -168,10 +168,11 @@ flowchart TD
 ---
 
 ### W11 — Spike Técnico: Proteção Monotônica de Stop Loss (SL Lock)
-* **Status:** **FUTURA / PLANEJADA**
+* **Status:** **EM INVESTIGAÇÃO — EVIDÊNCIA PARCIAL**
 * **Objetivo:** Investigar empiricamente em laboratório as 12 questões catalogadas no `GAP-007` a respeito da viabilidade de monitoramento e reversão monotônica de Stop Loss de posições manuais/automáticas.
-* **Entregáveis:** Documento de Spike Técnico dedicado, probe de teste de interceptação/reversão de SL, matriz de viabilidade e riscos de corretora.
-* **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção.
+* **Entregáveis Atuais:** [23 — Spike W11 SL Lock](file:///C:/Projetos/eddytrader/docs/23-SPIKE-W11-SL-LOCK.md), probe observacional Demo-only `research/w11/probe_sl_lock_w11.mq5` e teste puro `research/w11/test_sl_monotonic_w11.mq5` (7/7 PASS).
+* **Situação:** Detecção e matemática monotônica possuem evidência inicial; restauração corretiva, rejeição/throttling, Hedging, persistência, concorrência e carga multiativo permanecem abertas. As políticas de posição sem SL inicial e remoção de SL dependem de decisão do PO.
+* **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção. Critério ainda não atendido.
 
 ---
 
