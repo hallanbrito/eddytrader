@@ -17,7 +17,8 @@ flowchart TD
     W07 --> W08["W08: Hardening, Operação e Release Candidate (CONCLUÍDA)"]
     W08 --> W09["W09: Trader UX, HUD Visual e Persistência (CONCLUÍDA)"]
     W09 --> W10["W10: Disciplinador Trader, HUD Adaptativo e Account-Global (EM CONCLUSÃO)"]
-    W10 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (FUTURA)"]
+    W10 --> W103["W10.3: Resultado por Ciclo no HUD (CONCLUÍDA)"]
+    W103 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (FUTURA)"]
     W11 --> W12["W12: Implementação SL Lock (CONDICIONADA À W11)"]
     W10 -.-> COMPAT01["Gate COMPAT-01: Homologação Multi-Ativo e EAs Terceiros (DEMO ONLY)"]
     W08 -.-> LIVE01["Gate LIVE-01: Neutralização em Pregão Aberto (DEMO ONLY - PENDENTE)"]
@@ -148,8 +149,21 @@ flowchart TD
   6. Catalogação formal do `GAP-007` para Stop Loss Lock sem codificação prematura na W10;
   7. Manutenção estrita do motor matemático, FSM e garantias de liquidação intocadas;
   8. Preparação do Release Candidate 3 (`1.0.0-rc3`).
-* **Entregáveis:** `src/EddyTrader.mq5` atualizado, probe `tests/probe_external_ea_w10.mq5`, teste visual automatizado `tests/test_visual_w10.mq5`, regressão expandida para 67 testes (W10R-01 a W10R-10), [21 — Release Notes 1.0.0-rc3](file:///C:/Projetos/eddytrader/docs/21-RELEASE-NOTES-1.0.0-rc3.md).
-* **Critério de Conclusão:** 67/67 testes aprovados, 11/11 validações visuais automáticas aprovadas, compilação 100% limpa (0 erros, 0 avisos), documentação harmonizada.
+* **Entregáveis:** `src/EddyTrader.mq5` atualizado, probe `tests/probe_external_ea_w10.mq5`, teste visual automatizado `tests/test_visual_w10.mq5`, regressão expandida para 75 testes (W10R-01 a W10R-18, incluindo W10.2), [21 — Release Notes 1.0.0-rc3](file:///C:/Projetos/eddytrader/docs/21-RELEASE-NOTES-1.0.0-rc3.md).
+* **Critério de Conclusão:** 75/75 testes aprovados, 11/11 validações visuais automáticas aprovadas, compilação 100% limpa (0 erros, 0 avisos), documentação harmonizada.
+
+---
+
+### W10.3 — Resultado por Ciclo no HUD
+* **Status:** **CONCLUÍDA**
+* **Objetivo:** Reiniciar visualmente o resultado do HUD em `0,00` após `REOPENING`, usando $W_n(t)=D(t)-B_n$, sem apagar ou adulterar o resultado diário acumulado $D(t)$.
+* **Escopo Entregue:**
+  1. HUD Compacto e Minimizado passam a exibir o resultado do ciclo ativo $W_n$;
+  2. HUD Detalhado distingue explicitamente Resultado do Ciclo ($W_n$), Resultado do Dia ($D$) e Baseline do Ciclo ($B_n$);
+  3. diálogo de confirmação de limite mantém a mesma semântica do ciclo;
+  4. FSM, bloqueio de 4 horas, persistência, ownership/heartbeat, neutralização Account-Global e configuração de limite permanecem inalterados;
+  5. regressão expandida com `W10.3R-01` a `W10.3R-06` e validação visual expandida para 14 passos.
+* **Critério de Conclusão:** 81/81 testes formais aprovados, 14/14 validações visuais aprovadas, build completo com 0 erros / 0 avisos e diff revisado.
 
 ---
 

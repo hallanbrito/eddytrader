@@ -929,6 +929,7 @@ void UI_ShowConfirmDialog()
    double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
    double F       = CalculateFloatingResult();
    double D       = R_day + F;
+   double W       = CalculateWindowResult(D, g_baseline);
 
    g_config_ui_state = UI_STATE_CONFIRMING;
 
@@ -943,8 +944,8 @@ void UI_ShowConfirmDialog()
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurLimit", dx + 14, dy + 36, StringFormat("Limite Atual: %.2f %s", g_max_loss, curr), C'170,180,195', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_NewLimit", dx + 14, dy + 58, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
 
-   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado Atual: %+.2f %s", D, curr), res_clr, 8);
+   color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 108, "Aviso: Novo limite tem aplicacao imediata!", C'243,156,18', 8);
 
    // Botões: VOLTAR e CONFIRMAR
@@ -1010,6 +1011,7 @@ void RenderCollapsedHUD()
    double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
    double F       = CalculateFloatingResult();
    double D       = R_day + F;
+   double W       = CalculateWindowResult(D, g_baseline);
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
 
    color bg_clr     = C'20,24,33';
@@ -1073,8 +1075,8 @@ void RenderCollapsedHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Min_Status", 95, 5, status_txt, status_clr, 8, true);
 
    // 3. Resultado & Limite
-   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
-   string finance_txt = StringFormat("%+.2f / -%.2f %s", D, g_max_loss, curr);
+   color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
+   string finance_txt = StringFormat("%+.2f / -%.2f %s", W, g_max_loss, curr);
    UI_SetLabel(EDDY_UI_PREFIX + "Min_Finance", 220, 5, finance_txt, res_clr, 8);
 
    // 4. Botão Maximizar [ + ]
@@ -1110,6 +1112,7 @@ void RenderCompactHUD()
    double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
    double F       = CalculateFloatingResult();
    double D       = R_day + F;
+   double W       = CalculateWindowResult(D, g_baseline);
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
 
@@ -1138,10 +1141,10 @@ void RenderCompactHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Status_Lbl", 12, 32, "Status:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Status_Val", 80, 31, status_str, status_clr, 9, true);
 
-   // 3. Resultado Atual
+   // 3. Resultado do ciclo atual (W = D - Bn)
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Lbl", 12, 52, "Resultado:", C'150,160,175', 8);
-   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, StringFormat("%+.2f %s", D, curr), res_clr, 8, true);
+   color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, StringFormat("%+.2f %s", W, curr), res_clr, 8, true);
 
    // 4. Limite Atual
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Limit_Lbl", 12, 72, "Limite Atual:", C'150,160,175', 8);
@@ -1195,7 +1198,7 @@ void RenderCompactHUD()
    {
       int dx = 0, dy = 0;
       GetDialogPosition(dx, dy);
-      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado Atual: %+.2f %s", D, curr), res_clr, 8);
+      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
    }
 
    // NOTA: Enquanto em UI_STATE_EDITING, NÃO tocamos em Dlg_Input nem chamamos ChartRedraw(0) repetidamente a cada timer!
@@ -1265,7 +1268,7 @@ void RenderDetailedHUD()
       status_clr = clrRed;
    }
 
-   color res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
+   color day_res_clr = (D >= 0) ? C'46,204,113' : C'231,76,60';
 
    // Cartão Detalhado Nativo (W=370, H=340)
    // A largura extra mantém o título e a versão em áreas independentes.
@@ -1276,8 +1279,8 @@ void RenderDetailedHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Lbl", 12, 32, "Estado FSM:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_State_Val", 100, 32, StringFormat("%s (%s)", EnumToString(g_current_state), status_str), status_clr, 8, true);
 
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Lbl", 12, 52, "Janela / Base:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Val", 100, 52, StringFormat("J%d | Bn: %.2f %s", g_window_id, g_baseline, curr), clrWhite, 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Lbl", 12, 52, "Baseline Ciclo Bn:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Win_Val", 126, 52, StringFormat("J%d | %+.2f %s", g_window_id, g_baseline, curr), clrWhite, 8);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Lbl", 12, 72, "Limite Perda:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Val", 100, 72, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
@@ -1288,11 +1291,11 @@ void RenderDetailedHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Lbl", 12, 114, "Flutuante F(t):", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Val", 100, 114, StringFormat("%+.2f %s", F, curr), (F >= 0 ? C'46,204,113' : C'231,76,60'), 8);
 
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Lbl", 12, 134, "Consolidado D(t):", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 100, 134, StringFormat("%+.2f %s", D, curr), res_clr, 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Lbl", 12, 134, "Resultado Dia D:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 126, 134, StringFormat("%+.2f %s", D, curr), day_res_clr, 8, true);
 
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Lbl", 12, 154, "Res. Janela Wn:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 100, 154, StringFormat("%+.2f %s", W, curr), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Lbl", 12, 154, "Resultado Ciclo W:", C'150,160,175', 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 126, 154, StringFormat("%+.2f %s", W, curr), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Lbl", 12, 176, "Protecao / ID:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Val", 100, 176, (g_protection_event_id > 0 ? StringFormat("Evt #%I64u", g_protection_event_id) : "Nenhuma (Nominal)"), prot_clr, 8);

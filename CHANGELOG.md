@@ -4,6 +4,16 @@ Todas as mudanças relevantes do EddyTrader serão registradas neste arquivo.
 
 O projeto segue versionamento semântico para releases públicas.
 
+## [Não publicado]
+
+### Corrigido (W10.3)
+
+- HUD Compacto e Minimizado agora exibem o resultado do ciclo ativo $W=D-B_n$, iniciando visualmente em `0,00` após a reabertura;
+- HUD Detalhado agora identifica explicitamente Resultado do Ciclo ($W$), Resultado do Dia ($D$) e Baseline do Ciclo ($B_n$);
+- diálogo de confirmação de limite alinhado à mesma métrica de ciclo;
+- resultado diário acumulado, matemática, FSM, proteção de 4 horas e persistência crítica permanecem inalterados;
+- seis cenários formais `W10.3R-01..06` e três validações visuais adicionais cobrem reabertura, movimentos posteriores, preservação de $D$, proteção em `BLOCKED`, restart e coerência entre HUDs.
+
 ## [1.0.0-rc3] — 2026-09-14
 
 Terceiro Release Candidate — W10 Fundação do Disciplinador Trader, HUD Adaptativo e Compatibilidade Account-Global.
