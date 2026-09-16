@@ -22,8 +22,10 @@ Esta W existe para reduzir incerteza antes de qualquer proposta de W12. Ela não
 ## 3. Artefatos
 
 - `research/w11/probe_sl_lock_w11.mq5`: probe Demo-only, observacional e sem escrita comercial;
-- `research/w11/test_sl_monotonic_w11.mq5`: sete casos puros da classificação monotônica BUY/SELL, remoção, primeira definição e ruído inferior a meio tick;
-- evidência operacional preexistente no Journal do MT5 em 2026-09-16, conta Demo ActivTrades, modo Netting.
+- `research/w11/test_sl_monotonic_w11.mq5`: sete casos puros da classificacao monotonica BUY/SELL, remocao, primeira definicao e ruido inferior a meio tick;
+- `research/w11/probe_pending_order_gate_w11.mq5`: probe Demo-only com escrita de ordens experimentais; implementa gate de ordens pendentes (Buy/Sell Limit, Buy/Sell Stop) com SL e TP anexados; captura ciclo de vida e inventario real pos-ativacao; compilado com 0 erros e 0 warnings; execucao Demo pendente;
+- `research/w11/test_pending_sl_baseline_w11.mq5`: oito casos puros da regra W11-DEC-02 para ordens pendentes (SL anexado -> BASELINE_SET; sem SL -> WAIT_FIRST_SL); compilado com 0 erros e 0 warnings;
+- evidencia operacional preexistente no Journal do MT5 em 2026-09-16, conta Demo ActivTrades, modo Netting.
 
 ## 4. Evidência empírica já observada
 
@@ -49,7 +51,7 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 | 5 | Matemática BUY/SELL | **Respondida no modelo** | BUY: SL menor aumenta risco; SELL: SL maior aumenta risco. Melhoria avança a referência monotônica. Sete casos puros cobrem direções, remoção, primeira definição e ruído. |
 | 6 | Posição sem SL inicial | **Política decidida; validação técnica aberta** | O PO determinou aguardar o primeiro SL válido definido pelo trader, sem calcular ou impor SL inicial. Se a entrada já chegar com SL anexado, esse valor será a referência monotônica inicial assim que a posição existir. |
 | 7 | Remoção de SL | **Política decidida; validação técnica aberta** | Remoção é violação imediata. O fluxo desejado é restaurar o último SL protegido; se a restauração falhar, fechar imediatamente a posição. |
-| 8 | Ordens pendentes | **Aberta** | O probe registra `ORDER_ADD/UPDATE/DELETE`, mas falta matriz Buy/Sell Limit/Stop antes da execução. |
+| 8 | Ordens pendentes | **Instrumentada; execucao Demo pendente** | Probe dedicado `probe_pending_order_gate_w11.mq5` implementado e compilado (0 erros, 0 warnings). Captura ciclo completo de vida: `ORDER_ADD` → `ORDER_DELETE` → `DEAL_ADD` → `POSITION_EVENT` e inventario real pos-ativacao. Resultado da matriz (PASS/FAIL/BLOCKED) depende de execucao em conta Demo com mercado ativo; celulas permanecem **BLOCKED** ate essa evidencia ser obtida. |
 | 9 | Netting vs. Hedging | **Parcialmente respondida** | Netting agregou volume preservando o ticket no caso observado. Hedging e mudança/recriação de tickets ainda não foram validados. |
 | 10 | Trailing / EA externo | **Aberta** | O modelo aceita aperto e rejeita afrouxamento, mas loop/race com escritor concorrente não foi ensaiado. |
 | 11 | Persistência pós-restart | **Aberta** | O probe não persiste baseline de SL. Não há base para escolher GV/arquivo ou reconstrução histórica. |
@@ -82,15 +84,17 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 
 **Limite atual:** o SL Lock começa sobre posições existentes. Antes do gatilho da ordem pendente, o trader pode ajustar a preparação da entrada. A matriz Demo ainda deve confirmar a propagação de SL/TP por tipo de ordem, modo de execução e corretora antes de qualquer promessa produtiva.
 
-## 8. Próximo gate técnico
+## 8. Proximo gate tecnico
 
-A W11 não pode ser declarada concluída ainda. Antes de qualquer W12, faltam:
+A W11 nao pode ser declarada concluida ainda. Antes de qualquer W12, faltam:
 
+- **execucao controlada do `probe_pending_order_gate_w11.mq5`** em conta Demo com mercado ativo (mercado europeu ou americano); o probe esta compilado e pronto (0 erros, 0 warnings); ativar com `InpConfirmDemoLab=true` e `InpRunProbe=true`;
+- coleta da matriz real (PASS/FAIL/BLOCKED) para cada um dos quatro tipos de ordem, com inventario de SL/TP efetivos na posicao apos ativacao;
 - ensaios Demo controlados de widening/removal em BUY e SELL;
-- matriz de ordens pendentes com SL/TP anexados;
 - conta Hedging;
 - ensaio de escritor concorrente/trailing;
-- experimento de persistência/restart;
-- teste multiativo e, somente se autorizado, probe corretivo isolado para latência/rejeição/throttling.
+- experimento de persistencia/restart;
+- teste multiativo e, somente se autorizado, probe corretivo isolado para latencia/rejeicao/throttling.
 
-Até esses gates, a conclusão correta é: **viabilidade de detecção parcialmente demonstrada; viabilidade segura de restauração automática ainda não demonstrada**.
+Ate esses gates, a conclusao correta e: **viabilidade de deteccao parcialmente demonstrada; probe de ordens pendentes instrumentado e compilado; matriz do gate pendente aguardando execucao Demo real com mercado ativo**.
+

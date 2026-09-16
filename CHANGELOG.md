@@ -14,7 +14,10 @@ O projeto segue versionamento semântico para releases públicas.
 - decisão do PO registrada: se a restauração do último SL protegido falhar, fechar imediatamente a posição por ticket para preservar o capital;
 - decisão do PO registrada: sem SL inicial, aguardar a primeira definição válida; se a entrada já possuir SL anexado, adotá-lo como referência quando a posição existir, mantendo TP fora do lock;
 - distinguido SL/TP anexados à entrada de uma OCO entre duas ordens de entrada, que permanece fora do escopo produtivo atual;
-- viabilidade segura de restauração automática permanece não demonstrada; W12 continua bloqueada pelo critério de conclusão da W11.
+- adicionado `probe_pending_order_gate_w11.mq5`: probe Demo-only dedicado ao gate de ordens pendentes (Buy/Sell Limit, Buy/Sell Stop com SL/TP anexados); compilado com 0 erros e 0 warnings; guards de segurança (Demo-only, InpConfirmDemoLab, InpRunProbe) e limpeza por ticket implementados; execução Demo pendente — matriz BLOCKED até evidência real ser obtida;
+- adicionado `test_pending_sl_baseline_w11.mq5`: 8/8 casos puros da regra W11-DEC-02 para ordens pendentes (SL > 0 → BASELINE_SET, SL = 0 → WAIT_FIRST_SL);
+- viabilidade segura de restauração automática permanece não demonstrada; W12 continua bloqueada pelo critério de conclusão da W11;
+- `src/EddyTrader.mq5` permaneceu byte a byte sem alteração (SHA256=74140E83337531DCEA0A47CF83393A8109EFB142DC0CDEC433B35B5E75186C20).
 
 ### Corrigido (W10.3)
 
