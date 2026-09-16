@@ -192,9 +192,11 @@ flowchart TD
 * **Condição:** Exclusivamente em conta Demo durante horário regular de pregão. Pré-requisito para transição de `ADR 0005` para `Accepted` e liberação de v1.0.0 final.
 
 ### Gate COMPAT-01 — Convivência Multi-Ativo e EAs Terceiros
-* **Status:** **PLANEJADO / LAB PRONTO (DEMO ONLY)**
+* **Status:** **ENCERRADO COM RESSALVAS — EVIDÊNCIA EMPÍRICA PARCIAL/FORTE (DEMO ONLY)**
 * **Objetivo:** Validar empiricamente em conta Demo que o Disciplinador Trader atuando no Gráfico B fecha posições abertas por outros EAs ou Chart Trade manual no Gráfico A assim que a perda da conta atinge o limite diário configurado, sem interrupção de Magic Numbers.
 * **Artefato de Suporte:** `tests/probe_external_ea_w10.mq5`.
+* **Base do fechamento:** logs operacionais reais fornecidos pelo Product Owner demonstraram atuação account-global e neutralização de exposição originada fora do gráfico do Disciplinador no ambiente Demo observado.
+* **Ressalva obrigatória:** o fechamento comprova o comportamento no conjunto de cenários observado; não constitui homologação universal para todas as corretoras, builds, símbolos, modos Netting/Hedging, latências ou implementações de EAs terceiros. Novas combinações devem ser tratadas como validação adicional, não como regressão automaticamente coberta.
 
 ---
 

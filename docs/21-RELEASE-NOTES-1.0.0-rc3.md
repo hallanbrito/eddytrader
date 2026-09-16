@@ -144,7 +144,7 @@ Todos os 7 artefatos do projeto compilam com **0 errors, 0 warnings**:
 | Gate | Descrição | Status | Condição de Promoção |
 | :--- | :--- | :---: | :--- |
 | **`LIVE-01`** | Neutralização reativa com book real em mercado aberto | **PENDENTE** | Execução exclusiva em conta Demo durante pregão ao vivo. |
-| **`COMPAT-01`** | Homologação de convivência multi-ativo e robôs terceiros | **LAB PRONTO / PENDENTE** | Execução empírica em conta Demo via `probe_external_ea_w10.mq5`. |
+| **`COMPAT-01`** | Homologação de convivência multi-ativo e robôs terceiros | **ENCERRADO COM RESSALVAS** | Evidência empírica parcial/forte no ambiente Demo observado; não implica compatibilidade universal entre corretoras, modos de conta e EAs. |
 | **`GAP-007`** | Spike Técnico: Proteção Monotônica de Stop Loss | **ABERTO** | Investigação técnica em laboratório na Work Package W11. |
 
 ---

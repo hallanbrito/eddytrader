@@ -6,6 +6,11 @@ O projeto segue versionamento semântico para releases públicas.
 
 ## [Não publicado]
 
+### Evidência operacional (COMPAT-01)
+
+- `COMPAT-01` encerrado formalmente com ressalvas a partir dos logs operacionais reais fornecidos pelo Product Owner: evidência empírica parcial/forte de atuação account-global e neutralização de exposição externa no ambiente Demo observado;
+- o fechamento não afirma compatibilidade universal com toda corretora, build, símbolo, modo Netting/Hedging ou EA terceiro; combinações não observadas continuam exigindo validação específica.
+
 ### Pesquisa (W11 — parcial)
 
 - adicionado probe observacional Demo-only para eventos de Stop Loss, sem qualquer solicitação corretiva ou alteração no EA de produção;

@@ -20,7 +20,7 @@
 - **[Instalação em 2 minutos](docs/18-QUICKSTART.md)** — passo a passo direto ao ponto.
 
 > [!IMPORTANT]
-> A versão atual é um **Release Candidate preparado internamente**. Os gates de homologação `LIVE-01` (pregão ao vivo) e `COMPAT-01` (coexistência multi-ativo/EAs) serão executados exclusivamente em conta Demo antes da promoção para `v1.0.0`.
+> A versão atual é um **Release Candidate preparado internamente**. O gate `LIVE-01` continua pendente e será executado exclusivamente em conta Demo. O `COMPAT-01` foi encerrado com ressalvas a partir da evidência empírica disponível, sem alegação de compatibilidade universal.
 
 ---
 
@@ -169,7 +169,7 @@ O Disciplinador Trader foi homologado tecnicamente no MetaTrader 5 build 6193.
 - O EA só protege enquanto o terminal MT5 estiver aberto, conectado e executando o Expert Advisor.
 - Em mercado fechado, uma liquidação pode permanecer em `LIQUIDATING` até a negociação voltar a ser possível.
 - O MT5 não fornece ao EA um bloqueio preventivo físico para cliques manuais; durante `BLOCKED`, o Disciplinador Trader neutraliza a exposição **reativamente**.
-- A versão `1.0.0-rc3` possui os gates `LIVE-01` e `COMPAT-01` pendentes de homologação em mercado aberto/multi-ativo, exclusivamente em **Demo somente**.
+- A versão `1.0.0-rc3` ainda possui o gate `LIVE-01` pendente. O `COMPAT-01` foi encerrado com ressalvas: a evidência Demo é parcial/forte para o ambiente observado, mas não homologa toda corretora, modo de conta ou EA terceiro.
 
 ---
 
@@ -183,7 +183,7 @@ Teste Visual:    14 / 14 PASS (Automação de interface no Strategy Tester)
 Recovery Test:   10 / 10 PASS (Simulação automatizada do protocolo de recovery no Strategy Tester: probe_demo_restart_w10_2.mq5)
 W07:             Homologado com ressalva em conta Demo
 LIVE-01:         Pendente — DEMO ONLY
-COMPAT-01:       Pendente (Lab pronto: tests/probe_external_ea_w10.mq5) — DEMO ONLY
+COMPAT-01:       Encerrado com ressalvas — evidência empírica parcial/forte em Demo; não universal
 GAP-007:         Aberto — Investigação W11 (Stop Loss Lock NÃO implementado)
 ADR 0005:        Proposed
 ```
