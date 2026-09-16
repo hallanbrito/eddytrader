@@ -14,6 +14,8 @@ Esta W existe para reduzir incerteza antes de qualquer proposta de W12. Ela não
 
 - `OnTradeTransaction` recebe operações manuais, solicitações MQL5, ativações de ordens e operações do servidor. A ordem de chegada dos eventos não é garantida, uma solicitação pode gerar vários eventos e a fila possui 1024 elementos. Portanto, a arquitetura deve reconciliar o inventário real em vez de depender de uma sequência rígida: [documentação oficial](https://www.mql5.com/en/docs/event_handlers/ontradetransaction).
 - `TRADE_ACTION_SLTP` é a ação nativa para modificar SL/TP de uma posição aberta; `TRADE_ACTION_MODIFY` é usada para modificar uma ordem pendente: [documentação oficial](https://www.mql5.com/en/docs/constants/tradingconstants/enum_trade_request_actions).
+- Solicitações MQL5 possuem campos próprios `sl` e `tp`, e as operações de compra da biblioteca padrão também aceitam ambos os valores na solicitação de entrada: [MqlTradeRequest](https://www.mql5.com/en/docs/constants/structures/mqltraderequest) e [CTrade::Buy](https://www.mql5.com/en/docs/standardlibrary/tradeclasses/ctrade/ctradebuy).
+- O MT5 oferece tipos nativos de ordens pendentes Buy/Sell Limit e Buy/Sell Stop, mas não lista um tipo único de ordem OCO entre duas entradas; esse cancelamento mútuo exigiria coordenação reativa própria: [tipos de ordem](https://www.mql5.com/en/docs/constants/tradingconstants/orderproperties).
 - `SYMBOL_TRADE_STOPS_LEVEL` e `SYMBOL_TRADE_FREEZE_LEVEL` são restrições do símbolo que podem impedir uma restauração imediata: [documentação oficial](https://www.mql5.com/en/docs/constants/environment_state/marketinfoconstants).
 - `ACCOUNT_MARGIN_MODE` distingue Netting de Hedging; em Netting há apenas uma posição por símbolo, enquanto Hedging permite múltiplas posições: [documentação oficial](https://www.mql5.com/en/docs/constants/environment_state/accountinformation).
 
@@ -45,7 +47,7 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 | 3 | Throttling da corretora | **Aberta** | Nenhuma rajada de correções foi enviada. |
 | 4 | Rejeição / freeze / mercado | **Política decidida; validação técnica aberta** | O PO determinou: tentar restaurar o último SL protegido; se a restauração falhar, fechar imediatamente a posição para preservar o capital. Stops/freeze são registrados, mas o fluxo ainda não foi validado. |
 | 5 | Matemática BUY/SELL | **Respondida no modelo** | BUY: SL menor aumenta risco; SELL: SL maior aumenta risco. Melhoria avança a referência monotônica. Sete casos puros cobrem direções, remoção, primeira definição e ruído. |
-| 6 | Posição sem SL inicial | **Ambiguidade de produto** | Abertura sem SL foi observada. Exigir SL imediato ou começar a proteção no primeiro SL são políticas distintas e exigem decisão do PO. |
+| 6 | Posição sem SL inicial | **Política decidida; validação técnica aberta** | O PO determinou aguardar o primeiro SL válido definido pelo trader, sem calcular ou impor SL inicial. Se a entrada já chegar com SL anexado, esse valor será a referência monotônica inicial assim que a posição existir. |
 | 7 | Remoção de SL | **Política decidida; validação técnica aberta** | Remoção é violação imediata. O fluxo desejado é restaurar o último SL protegido; se a restauração falhar, fechar imediatamente a posição. |
 | 8 | Ordens pendentes | **Aberta** | O probe registra `ORDER_ADD/UPDATE/DELETE`, mas falta matriz Buy/Sell Limit/Stop antes da execução. |
 | 9 | Netting vs. Hedging | **Parcialmente respondida** | Netting agregou volume preservando o ticket no caso observado. Hedging e mudança/recriação de tickets ainda não foram validados. |
@@ -72,13 +74,20 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 
 **Limite atual:** esta é uma decisão de produto, não uma afirmação de viabilidade já comprovada. O probe corretivo, os retcodes aceitos, a confirmação pós-request e a prevenção de loops precisam ser definidos e testados em Demo antes de qualquer alteração em produção.
 
+### W11-DEC-02 — Posição sem SL inicial e entrada com proteção anexada
+
+**Decisão:** uma posição pode nascer sem SL. Nesse caso, o Disciplinador não calcula nem impõe um nível inicial e aguarda o primeiro SL válido definido pelo trader. Esse primeiro valor passa a ser a referência monotônica protegida. Se uma ordem pendente ou solicitação de entrada já contiver SL, o valor anexado deverá ser capturado como referência inicial quando a posição for efetivamente criada. O TP não faz parte do bloqueio monotônico e pode continuar sendo administrado pelo trader.
+
+**Distinção de OCO:** configurar SL e TP na mesma entrada funciona como uma proteção vinculada à futura posição: o fechamento integral por uma das saídas elimina a exposição à qual a outra se referia. Isso não deve ser confundido com uma OCO entre duas ordens pendentes de entrada, por exemplo Buy Stop e Sell Stop com cancelamento mútuo. O MT5 não expõe um tipo único de ordem OCO para esse segundo caso; implementá-lo exigiria um coordenador reativo, com riscos de corrida, execução parcial e latência, e permanece fora do escopo produtivo da W11.
+
+**Limite atual:** o SL Lock começa sobre posições existentes. Antes do gatilho da ordem pendente, o trader pode ajustar a preparação da entrada. A matriz Demo ainda deve confirmar a propagação de SL/TP por tipo de ordem, modo de execução e corretora antes de qualquer promessa produtiva.
+
 ## 8. Próximo gate técnico
 
 A W11 não pode ser declarada concluída ainda. Antes de qualquer W12, faltam:
 
-- decisão do PO para posições sem SL inicial;
 - ensaios Demo controlados de widening/removal em BUY e SELL;
-- matriz de ordens pendentes;
+- matriz de ordens pendentes com SL/TP anexados;
 - conta Hedging;
 - ensaio de escritor concorrente/trailing;
 - experimento de persistência/restart;

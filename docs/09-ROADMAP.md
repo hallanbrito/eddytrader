@@ -171,7 +171,7 @@ flowchart TD
 * **Status:** **EM INVESTIGAÇÃO — EVIDÊNCIA PARCIAL**
 * **Objetivo:** Investigar empiricamente em laboratório as 12 questões catalogadas no `GAP-007` a respeito da viabilidade de monitoramento e reversão monotônica de Stop Loss de posições manuais/automáticas.
 * **Entregáveis Atuais:** [23 — Spike W11 SL Lock](file:///C:/Projetos/eddytrader/docs/23-SPIKE-W11-SL-LOCK.md), probe observacional Demo-only `research/w11/probe_sl_lock_w11.mq5` e teste puro `research/w11/test_sl_monotonic_w11.mq5` (7/7 PASS).
-* **Situação:** Detecção e matemática monotônica possuem evidência inicial. O PO decidiu que falha na restauração do último SL protegido deve provocar fechamento imediato da posição. Restauração corretiva, rejeição/throttling, Hedging, persistência, concorrência e carga multiativo permanecem tecnicamente abertas; a política de posição sem SL inicial ainda depende de decisão do PO.
+* **Situação:** Detecção e matemática monotônica possuem evidência inicial. O PO decidiu que falha na restauração do último SL protegido deve provocar fechamento imediato da posição. Também decidiu que posições sem SL inicial serão monitoradas a partir do primeiro SL válido; entradas com SL anexado usarão esse valor como referência quando a posição existir. Restauração corretiva, ordens pendentes, rejeição/throttling, Hedging, persistência, concorrência e carga multiativo permanecem tecnicamente abertas.
 * **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção. Critério ainda não atendido.
 
 ---

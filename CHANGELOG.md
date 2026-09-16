@@ -12,6 +12,8 @@ O projeto segue versionamento semântico para releases públicas.
 - formalizada matriz das 12 questões do GAP-007 com distinção entre evidência obtida, hipótese aberta e decisão de produto pendente;
 - classificação monotônica BUY/SELL validada em 7/7 casos puros;
 - decisão do PO registrada: se a restauração do último SL protegido falhar, fechar imediatamente a posição por ticket para preservar o capital;
+- decisão do PO registrada: sem SL inicial, aguardar a primeira definição válida; se a entrada já possuir SL anexado, adotá-lo como referência quando a posição existir, mantendo TP fora do lock;
+- distinguido SL/TP anexados à entrada de uma OCO entre duas ordens de entrada, que permanece fora do escopo produtivo atual;
 - viabilidade segura de restauração automática permanece não demonstrada; W12 continua bloqueada pelo critério de conclusão da W11.
 
 ### Corrigido (W10.3)
