@@ -43,10 +43,10 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 | 1 | Notificação transacional | **Parcialmente respondida** | Alteração manual de SL foi observada como `TRADE_TRANSACTION_POSITION`, acompanhada de `REQUEST`; o inventário do servidor deve ser a fonte final. Ordens pendentes ainda precisam de ensaio dedicado. |
 | 2 | Latência de reversão | **Aberta** | O probe não restaura SL e, por desenho, não mede round-trip corretivo. |
 | 3 | Throttling da corretora | **Aberta** | Nenhuma rajada de correções foi enviada. |
-| 4 | Rejeição / freeze / mercado | **Aberta** | Stops/freeze são registrados, mas não houve solicitação corretiva rejeitada. |
+| 4 | Rejeição / freeze / mercado | **Política decidida; validação técnica aberta** | O PO determinou: tentar restaurar o último SL protegido; se a restauração falhar, fechar imediatamente a posição para preservar o capital. Stops/freeze são registrados, mas o fluxo ainda não foi validado. |
 | 5 | Matemática BUY/SELL | **Respondida no modelo** | BUY: SL menor aumenta risco; SELL: SL maior aumenta risco. Melhoria avança a referência monotônica. Sete casos puros cobrem direções, remoção, primeira definição e ruído. |
 | 6 | Posição sem SL inicial | **Ambiguidade de produto** | Abertura sem SL foi observada. Exigir SL imediato ou começar a proteção no primeiro SL são políticas distintas e exigem decisão do PO. |
-| 7 | Remoção de SL | **Ambiguidade de produto** | Tecnicamente classificada como violação. Restaurar o último SL ou fechar a posição são políticas distintas e exigem decisão do PO. |
+| 7 | Remoção de SL | **Política decidida; validação técnica aberta** | Remoção é violação imediata. O fluxo desejado é restaurar o último SL protegido; se a restauração falhar, fechar imediatamente a posição. |
 | 8 | Ordens pendentes | **Aberta** | O probe registra `ORDER_ADD/UPDATE/DELETE`, mas falta matriz Buy/Sell Limit/Stop antes da execução. |
 | 9 | Netting vs. Hedging | **Parcialmente respondida** | Netting agregou volume preservando o ticket no caso observado. Hedging e mudança/recriação de tickets ainda não foram validados. |
 | 10 | Trailing / EA externo | **Aberta** | O modelo aceita aperto e rejeita afrouxamento, mas loop/race com escritor concorrente não foi ensaiado. |
@@ -64,12 +64,19 @@ Esses registros comprovam somente observação/eventos no ambiente testado. Eles
 7. operar exclusivamente em Demo com confirmação explícita;
 8. manter logs de varredura sem mudança desativados por padrão para evitar ruído e pressão na fila.
 
-## 7. Próximo gate técnico
+## 7. Decisão do Product Owner
+
+### W11-DEC-01 — Falha ao restaurar SL protegido
+
+**Decisão:** diante de afrouxamento ou remoção, o sistema deverá tentar restaurar o último SL monotônico válido. Se a corretora rejeitar a restauração, o nível estiver tecnicamente inválido ou a posição continuar desprotegida após a tentativa, o Disciplinador deverá **fechar imediatamente a posição por ticket**, priorizando a preservação do capital.
+
+**Limite atual:** esta é uma decisão de produto, não uma afirmação de viabilidade já comprovada. O probe corretivo, os retcodes aceitos, a confirmação pós-request e a prevenção de loops precisam ser definidos e testados em Demo antes de qualquer alteração em produção.
+
+## 8. Próximo gate técnico
 
 A W11 não pode ser declarada concluída ainda. Antes de qualquer W12, faltam:
 
 - decisão do PO para posições sem SL inicial;
-- decisão do PO para remoção de SL;
 - ensaios Demo controlados de widening/removal em BUY e SELL;
 - matriz de ordens pendentes;
 - conta Hedging;

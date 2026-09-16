@@ -11,6 +11,7 @@ O projeto segue versionamento semântico para releases públicas.
 - adicionado probe observacional Demo-only para eventos de Stop Loss, sem qualquer solicitação corretiva ou alteração no EA de produção;
 - formalizada matriz das 12 questões do GAP-007 com distinção entre evidência obtida, hipótese aberta e decisão de produto pendente;
 - classificação monotônica BUY/SELL validada em 7/7 casos puros;
+- decisão do PO registrada: se a restauração do último SL protegido falhar, fechar imediatamente a posição por ticket para preservar o capital;
 - viabilidade segura de restauração automática permanece não demonstrada; W12 continua bloqueada pelo critério de conclusão da W11.
 
 ### Corrigido (W10.3)
