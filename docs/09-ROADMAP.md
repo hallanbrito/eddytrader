@@ -18,7 +18,7 @@ flowchart TD
     W08 --> W09["W09: Trader UX, HUD Visual e Persistência (CONCLUÍDA)"]
     W09 --> W10["W10: Disciplinador Trader, HUD Adaptativo e Account-Global (EM CONCLUSÃO)"]
     W10 --> W103["W10.3: Resultado por Ciclo no HUD (CONCLUÍDA)"]
-    W103 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (FUTURA)"]
+    W103 --> W11["W11: Spike Técnico Stop Loss Monotônico GAP-007 (EM INVESTIGAÇÃO)"]
     W11 --> W12["W12: Implementação SL Lock (CONDICIONADA À W11)"]
     W10 -.-> COMPAT01["Gate COMPAT-01: Homologação Multi-Ativo e EAs Terceiros (DEMO ONLY)"]
     W08 -.-> LIVE01["Gate LIVE-01: Neutralização em Pregão Aberto (DEMO ONLY - PENDENTE)"]
@@ -168,10 +168,11 @@ flowchart TD
 ---
 
 ### W11 — Spike Técnico: Proteção Monotônica de Stop Loss (SL Lock)
-* **Status:** **FUTURA / PLANEJADA**
+* **Status:** **EM INVESTIGAÇÃO — EVIDÊNCIA PARCIAL**
 * **Objetivo:** Investigar empiricamente em laboratório as 12 questões catalogadas no `GAP-007` a respeito da viabilidade de monitoramento e reversão monotônica de Stop Loss de posições manuais/automáticas.
-* **Entregáveis:** Documento de Spike Técnico dedicado, probe de teste de interceptação/reversão de SL, matriz de viabilidade e riscos de corretora.
-* **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção.
+* **Entregáveis Atuais:** [23 — Spike W11 SL Lock](file:///C:/Projetos/eddytrader/docs/23-SPIKE-W11-SL-LOCK.md), probe observacional Demo-only `research/w11/probe_sl_lock_w11.mq5` e teste puro `research/w11/test_sl_monotonic_w11.mq5` (7/7 PASS).
+* **Situação:** Detecção e matemática monotônica possuem evidência inicial. O PO decidiu que falha na restauração do último SL protegido deve provocar fechamento imediato da posição. Também decidiu que posições sem SL inicial serão monitoradas a partir do primeiro SL válido; entradas com SL anexado usarão esse valor como referência quando a posição existir. Restauração corretiva, ordens pendentes, rejeição/throttling, Hedging, persistência, concorrência e carga multiativo permanecem tecnicamente abertas.
+* **Critério de Conclusão:** Todas as 12 questões empíricas respondidas com evidências do MT5, sem implementação em produção. Critério ainda não atendido.
 
 ---
 
@@ -191,9 +192,11 @@ flowchart TD
 * **Condição:** Exclusivamente em conta Demo durante horário regular de pregão. Pré-requisito para transição de `ADR 0005` para `Accepted` e liberação de v1.0.0 final.
 
 ### Gate COMPAT-01 — Convivência Multi-Ativo e EAs Terceiros
-* **Status:** **PLANEJADO / LAB PRONTO (DEMO ONLY)**
+* **Status:** **ENCERRADO COM RESSALVAS — EVIDÊNCIA EMPÍRICA PARCIAL/FORTE (DEMO ONLY)**
 * **Objetivo:** Validar empiricamente em conta Demo que o Disciplinador Trader atuando no Gráfico B fecha posições abertas por outros EAs ou Chart Trade manual no Gráfico A assim que a perda da conta atinge o limite diário configurado, sem interrupção de Magic Numbers.
 * **Artefato de Suporte:** `tests/probe_external_ea_w10.mq5`.
+* **Base do fechamento:** logs operacionais reais fornecidos pelo Product Owner demonstraram atuação account-global e neutralização de exposição originada fora do gráfico do Disciplinador no ambiente Demo observado.
+* **Ressalva obrigatória:** o fechamento comprova o comportamento no conjunto de cenários observado; não constitui homologação universal para todas as corretoras, builds, símbolos, modos Netting/Hedging, latências ou implementações de EAs terceiros. Novas combinações devem ser tratadas como validação adicional, não como regressão automaticamente coberta.
 
 ---
 
