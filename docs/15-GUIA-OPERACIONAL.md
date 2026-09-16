@@ -3,7 +3,7 @@
 > **Identidade Pública:** Disciplinador Trader  
 > **Nome de Projeto Interno / Arquivo:** EddyTrader (`src/EddyTrader.mq5`)  
 > **Versão:** 1.0.0-rc3 (Release Candidate 3 — Preparada, Não Publicada)  
-> **Status:** Homologado em Ambiente Laboratorial e Demo com Ressalvas (`LIVE-01` pendente; `COMPAT-01` encerrado com evidência parcial/forte, sem compatibilidade universal)  
+> **Status:** Homologado em Ambiente Laboratorial e Demo com Ressalvas (`LIVE-01` pendente; `COMPAT-01` encerrado com evidência parcial/forte, sem compatibilidade universal)
 > **Público-Alvo:** Operadores, Gestores de Risco e Administradores de Plataforma MetaTrader 5
 
 ---
