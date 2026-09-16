@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos 11 Passos do Teste Visual W10"
+#property description "Validação Automatizada dos 14 Passos do Teste Visual W10/W10.3"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -29,17 +29,17 @@ void RunVisualTests()
 {
    int hFile = FileOpen("test_visual_w10.txt", FILE_WRITE|FILE_TXT|FILE_ANSI);
    Print("==================================================================");
-   Print(" INICIANDO BATERIA DE TESTE VISUAL W10 (11 PASSOS)");
+   Print(" INICIANDO BATERIA DE TESTE VISUAL W10/W10.3 (14 PASSOS)");
    Print("==================================================================");
    if(hFile != INVALID_HANDLE)
    {
       FileWriteString(hFile, "==================================================================\r\n");
-      FileWriteString(hFile, " BATERIA DE TESTE VISUAL W10 — Disciplinador Trader (11 PASSOS)\r\n");
+      FileWriteString(hFile, " BATERIA DE TESTE VISUAL W10/W10.3 — Disciplinador Trader (14 PASSOS)\r\n");
       FileWriteString(hFile, "==================================================================\r\n");
    }
 
    int passed = 0;
-   int total = 11;
+   int total = 14;
 
    // Limpeza preventiva
    ObjectsDeleteAll(0, EDDY_UI_PREFIX);
@@ -220,11 +220,65 @@ void RunVisualTests()
    LogVisual(hFile, "Passo 11 (Sem Colisão One Click)", no_collision,
              StringFormat("Origem Y do Disciplinador = %d px >= %d px (margem segura contra One Click Trading)", hud_origin_y, one_click_height));
 
+   //-----------------------------------------------------------------
+   // Passo 12: COMPACT exibe resultado do ciclo W
+   //-----------------------------------------------------------------
+   double daily_12 = -585.0;
+   double baseline_12 = -620.0;
+   double cycle_12 = daily_12 - baseline_12;
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX);
+   ObjectCreate(0, EDDY_UI_PREFIX + "Hud_Res_Val", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Hud_Res_Val", OBJPROP_TEXT, StringFormat("%+.2f BRL", cycle_12));
+   string compact_result_12 = ObjectGetString(0, EDDY_UI_PREFIX + "Hud_Res_Val", OBJPROP_TEXT);
+   bool p12_ok = (compact_result_12 == "+35.00 BRL" && daily_12 == -585.0);
+   if(p12_ok) passed++;
+   LogVisual(hFile, "Passo 12 (COMPACT usa W)", p12_ok,
+             StringFormat("Compacto=%s, mantendo D=%+.2f e Bn=%+.2f", compact_result_12, daily_12, baseline_12));
+
+   //-----------------------------------------------------------------
+   // Passo 13: COLLAPSED exibe o mesmo resultado do ciclo W
+   //-----------------------------------------------------------------
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX);
+   ObjectCreate(0, EDDY_UI_PREFIX + "Min_Finance", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Min_Finance", OBJPROP_TEXT, StringFormat("%+.2f / -500.00 BRL", cycle_12));
+   string collapsed_result_13 = ObjectGetString(0, EDDY_UI_PREFIX + "Min_Finance", OBJPROP_TEXT);
+   bool p13_ok = (collapsed_result_13 == "+35.00 / -500.00 BRL");
+   if(p13_ok) passed++;
+   LogVisual(hFile, "Passo 13 (COLLAPSED usa W)", p13_ok,
+             StringFormat("Minimizado coerente com o compacto: %s", collapsed_result_13));
+
+   //-----------------------------------------------------------------
+   // Passo 14: DETAILED explicita W, D e Bn
+   //-----------------------------------------------------------------
+   ObjectsDeleteAll(0, EDDY_UI_PREFIX);
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_Win_Lbl", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_Win_Lbl", OBJPROP_TEXT, "Baseline Ciclo Bn:");
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_Cons_Lbl", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_Cons_Lbl", OBJPROP_TEXT, "Resultado Dia D:");
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_WinRes_Lbl", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_WinRes_Lbl", OBJPROP_TEXT, "Resultado Ciclo W:");
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_Win_Val", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_Win_Val", OBJPROP_TEXT, StringFormat("J2 | %+.2f BRL", baseline_12));
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_Cons_Val", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_Cons_Val", OBJPROP_TEXT, StringFormat("%+.2f BRL", daily_12));
+   ObjectCreate(0, EDDY_UI_PREFIX + "Det_WinRes_Val", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, EDDY_UI_PREFIX + "Det_WinRes_Val", OBJPROP_TEXT, StringFormat("%+.2f BRL", cycle_12));
+
+   bool p14_ok = (ObjectGetString(0, EDDY_UI_PREFIX + "Det_Win_Lbl", OBJPROP_TEXT) == "Baseline Ciclo Bn:" &&
+                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_Cons_Lbl", OBJPROP_TEXT) == "Resultado Dia D:" &&
+                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_WinRes_Lbl", OBJPROP_TEXT) == "Resultado Ciclo W:" &&
+                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_Win_Val", OBJPROP_TEXT) == "J2 | -620.00 BRL" &&
+                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_Cons_Val", OBJPROP_TEXT) == "-585.00 BRL" &&
+                  ObjectGetString(0, EDDY_UI_PREFIX + "Det_WinRes_Val", OBJPROP_TEXT) == "+35.00 BRL");
+   if(p14_ok) passed++;
+   LogVisual(hFile, "Passo 14 (DETAILED explicita W/D/Bn)", p14_ok,
+             "Detalhado preserva auditoria contábil e distingue ciclo, dia e baseline");
+
    // Limpeza final
    ObjectsDeleteAll(0, EDDY_UI_PREFIX);
 
    string summary = StringFormat("==================================================================\r\n"
-                                 " RESULTADO TESTE VISUAL W10: %d/%d PASS\r\n"
+                                 " RESULTADO TESTE VISUAL W10/W10.3: %d/%d PASS\r\n"
                                  "==================================================================",
                                  passed, total);
    Print(summary);

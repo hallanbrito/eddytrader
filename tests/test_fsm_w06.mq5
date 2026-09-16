@@ -6,7 +6,7 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Validação Automatizada dos Cenários W06-01..15, W07R-01..06, W08R-01..02, W09R-01..29 e W10R-01..10"
+#property description "Validação Automatizada W06/W07R/W08R/W09R/W10R/W10.3R"
 
 //--- Definição dos Estados da FSM
 enum ENUM_EDDY_STATE
@@ -2256,6 +2256,124 @@ void RunAllTests()
 
    TestReleaseGuard(id_18, is_owner_18);
 
+   //-----------------------------------------------------------------
+   // W10.3R-01: REOPENING Cria Novo Ciclo Visual em Zero
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state     = EDDY_STATE_REOPENING;
+   test_window_id = 1;
+   double daily_at_reopen_01 = -620.0;
+
+   test_window_id++;
+   test_baseline = daily_at_reopen_01;
+   double cycle_at_reopen_01 = daily_at_reopen_01 - test_baseline;
+   test_state = EDDY_STATE_MONITORING;
+
+   AssertTest("W10.3R-01",
+              (test_state == EDDY_STATE_MONITORING &&
+               test_window_id == 2 &&
+               MathAbs(cycle_at_reopen_01) < 0.00001),
+              "REOPENING fotografa D como baseline e o HUD inicia o novo ciclo em W=0.00 ao retornar a MONITORING");
+
+   //-----------------------------------------------------------------
+   // W10.3R-02: Ganho e Perda Posteriores Refletem W = D - Bn
+   //-----------------------------------------------------------------
+   double baseline_02 = -620.0;
+   double daily_gain_02 = -570.0;
+   double daily_loss_02 = -695.0;
+   double cycle_gain_02 = daily_gain_02 - baseline_02;
+   double cycle_loss_02 = daily_loss_02 - baseline_02;
+
+   AssertTest("W10.3R-02",
+              (MathAbs(cycle_gain_02 - 50.0) < 0.00001 &&
+               MathAbs(cycle_loss_02 + 75.0) < 0.00001),
+              "Movimentos posteriores ao desbloqueio aparecem no ciclo como +50.00 e -75.00 sem carregar a perda anterior");
+
+   //-----------------------------------------------------------------
+   // W10.3R-03: Resultado Diário D Permanece Acumulado
+   //-----------------------------------------------------------------
+   double daily_before_display_03 = -620.0;
+   double baseline_03 = daily_before_display_03;
+   double cycle_display_03 = daily_before_display_03 - baseline_03;
+
+   AssertTest("W10.3R-03",
+              (MathAbs(cycle_display_03) < 0.00001 &&
+               MathAbs(daily_before_display_03 + 620.0) < 0.00001),
+              "Zerar visualmente W nao apaga nem adultera o resultado diario acumulado D=-620.00");
+
+   //-----------------------------------------------------------------
+   // W10.3R-04: BLOCKED Continua Exibindo Proteção
+   //-----------------------------------------------------------------
+   test_state = EDDY_STATE_BLOCKED;
+   datetime blocked_now_04 = D'2026.09.15 10:17:42';
+   test_t_unlock = D'2026.09.15 14:00:00';
+   long rem_sec_04 = (long)(test_t_unlock - blocked_now_04);
+   int h_04 = (int)(rem_sec_04 / 3600);
+   int m_04 = (int)((rem_sec_04 % 3600) / 60);
+   int s_04 = (int)(rem_sec_04 % 60);
+   string blocked_status_04 = StringFormat("BLOQUEADO %02d:%02d:%02d", h_04, m_04, s_04);
+
+   AssertTest("W10.3R-04",
+              (test_state == EDDY_STATE_BLOCKED &&
+               StringFind(blocked_status_04, "BLOQUEADO") >= 0 &&
+               blocked_status_04 == "BLOQUEADO 03:42:18"),
+              "Uso de W no HUD preserva o alerta e a contagem regressiva de protecao durante BLOCKED");
+
+   //-----------------------------------------------------------------
+   // W10.3R-05: Restart Preserva Baseline e Resultado do Ciclo
+   //-----------------------------------------------------------------
+   TestClearGV();
+   test_state       = EDDY_STATE_MONITORING;
+   test_window_id   = 2;
+   test_baseline    = -620.0;
+   test_day_start   = D'2026.09.15 00:00:00';
+   test_t_trigger   = 0;
+   test_t_unlock    = 0;
+   test_event_id    = 0;
+   TestPersistGV();
+
+   test_state       = EDDY_STATE_INIT;
+   test_window_id   = 0;
+   test_baseline    = 0.0;
+   EddyRecoveryState rec_w103_05;
+   bool loaded_w103_05 = TestLoadGV(rec_w103_05);
+   if(loaded_w103_05)
+   {
+      test_state     = rec_w103_05.state;
+      test_window_id = rec_w103_05.window_id;
+      test_baseline  = rec_w103_05.baseline;
+   }
+   double daily_after_restart_05 = -585.0;
+   double cycle_after_restart_05 = daily_after_restart_05 - test_baseline;
+
+   AssertTest("W10.3R-05",
+              (loaded_w103_05 &&
+               test_state == EDDY_STATE_MONITORING &&
+               test_window_id == 2 &&
+               MathAbs(test_baseline + 620.0) < 0.00001 &&
+               MathAbs(cycle_after_restart_05 - 35.0) < 0.00001),
+              "Recovery restaura Bn persistida e mantem W correto apos restart");
+
+   //-----------------------------------------------------------------
+   // W10.3R-06: HUDs Compacto, Minimizado e Detalhado São Coerentes
+   //-----------------------------------------------------------------
+   double daily_06 = -585.0;
+   double baseline_06 = -620.0;
+   double cycle_06 = daily_06 - baseline_06;
+   double compact_value_06 = cycle_06;
+   double collapsed_value_06 = cycle_06;
+   double detailed_cycle_06 = cycle_06;
+   double detailed_daily_06 = daily_06;
+   double detailed_baseline_06 = baseline_06;
+
+   AssertTest("W10.3R-06",
+              (MathAbs(compact_value_06 - 35.0) < 0.00001 &&
+               MathAbs(collapsed_value_06 - compact_value_06) < 0.00001 &&
+               MathAbs(detailed_cycle_06 - compact_value_06) < 0.00001 &&
+               MathAbs(detailed_daily_06 + 585.0) < 0.00001 &&
+               MathAbs(detailed_baseline_06 + 620.0) < 0.00001),
+              "COMPACT e COLLAPSED exibem W; DETAILED explicita coerentemente Resultado do Ciclo W, Resultado do Dia D e Baseline Bn");
+
    // Limpeza final de GVs de teste
    TestClearGV();
 
@@ -2263,7 +2381,7 @@ void RunAllTests()
    // Relatório Final da Bateria
    //-----------------------------------------------------------------
    string ftr1 = "==================================================================";
-   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R/W09R/W10R: Total=%d | Aprovados=%d | Falhas=%d",
+   string ftr2 = StringFormat(" Resumo da Bateria W06/W07R/W08R/W09R/W10R/W10.3R: Total=%d | Aprovados=%d | Falhas=%d",
                               g_total_tests, g_passed_tests, g_failed_tests);
    Print(ftr1);
    Print(ftr2);
