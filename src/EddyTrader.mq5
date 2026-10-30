@@ -96,6 +96,8 @@ datetime             g_day_start              = 0;
 bool                 g_safe_to_operate        = false;
 // Diagnostico da consulta financeira: nao confundir falha de historico com zero contábil.
 bool                 g_financial_history_ok   = true;
+// Falha transitoria de historico separada de perda de ownership/persistencia.
+bool                 g_financial_degraded     = false;
 
 // Estado mutável do limite de perda e painel UX
 double                         g_max_loss               = 500.0;
@@ -375,20 +377,28 @@ void ReleaseInstanceGuard()
 //+------------------------------------------------------------------+
 double CalculateRealizedResultToday(datetime t_start_day, datetime t_now)
 {
+   static datetime s_last_history_error_log = 0;
    if(t_now <= 0) t_now = GetServerTimeSafe();
    if(t_start_day <= 0) t_start_day = GetDayStart(t_now);
 
    if(!HistorySelect(t_start_day, t_now))
    {
       g_financial_history_ok = false;
-      PrintFormat("[EddyTrader][CRITICAL] HistorySelect(%s, %s) falhou (erro %d): resultado financeiro INDISPONIVEL.",
-                  TimeToString(t_start_day, TIME_DATE|TIME_SECONDS),
-                  TimeToString(t_now, TIME_DATE|TIME_SECONDS),
-                  GetLastError());
+      datetime log_now = TimeCurrent();
+      if(s_last_history_error_log == 0 || log_now < s_last_history_error_log ||
+         log_now - s_last_history_error_log >= 30)
+      {
+         PrintFormat("[EddyTrader][CRITICAL] HistorySelect(%s, %s) falhou (erro %d): resultado financeiro INDISPONIVEL.",
+                     TimeToString(t_start_day, TIME_DATE|TIME_SECONDS),
+                     TimeToString(t_now, TIME_DATE|TIME_SECONDS),
+                     GetLastError());
+         s_last_history_error_log = log_now;
+      }
       // Somente sentinela interna: chamadores devem verificar g_financial_history_ok.
       return 0.0;
    }
    g_financial_history_ok = true;
+   s_last_history_error_log = 0;
    double realized = 0.0;
    int total_deals = HistoryDealsTotal();
    for(int i = 0; i < total_deals; i++)
@@ -1462,6 +1472,7 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
             PrintFormat("[EddyTrader][CRITICAL] REOPENING suspenso: historico indisponivel. Retendo BLOCKED (EventID=%I64u, Unlock=%s).",
                         g_protection_event_id, TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
             g_current_state = EDDY_STATE_BLOCKED;
+            g_financial_degraded = true;
             g_safe_to_operate = false;
             PersistState();
             break;
@@ -1556,10 +1567,16 @@ void ProcessFSM()
          {
             // Sem dado financeiro confiavel: nao avaliar falso zero nem liberar configuracao.
             // Reavaliar no proximo ciclo do timer; nao liquidar sem evidencia de limite.
+            g_financial_degraded = true;
             g_safe_to_operate = false;
             break;
          }
-         g_safe_to_operate = true;
+         if(g_financial_degraded)
+         {
+            g_financial_degraded = false;
+            g_safe_to_operate = true;
+            PrintFormat("[EddyTrader][INFO] Historico financeiro recuperado; MONITORING retomado com dados confiaveis.");
+         }
          double W = CalculateWindowResult(D, g_baseline);
 
          // T04: Avalia violação do limite financeiro da janela
