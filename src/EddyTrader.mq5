@@ -470,19 +470,25 @@ int CancelPendingOrders(bool rate_limit_logs = false)
       string sym   = order_symbols[i];
       if(ticket > 0)
       {
-         if(!g_trade.OrderDelete(ticket))
+         // O booleano do CTrade atesta a solicitacao local, NAO sua execucao no servidor.
+         bool request_sent = g_trade.OrderDelete(ticket);
+         uint trade_retcode = g_trade.ResultRetcode();
+         bool server_done = (trade_retcode == TRADE_RETCODE_DONE);
+         bool still_pending = OrderSelect(ticket);
+         if(!request_sent || !server_done || still_pending)
          {
             fail_count++;
             if(should_log)
             {
-               PrintFormat("[EddyTrader][ERROR] FALHA ao cancelar ordem pendente #%I64u (%s): Retcode %u (%s)",
-                           ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+               PrintFormat("[EddyTrader][ERROR] Cancelamento NAO confirmado #%I64u (%s): enviado=%d retcode=%u (%s), ainda_pendente=%d",
+                           ticket, sym, (int)request_sent, trade_retcode,
+                           g_trade.ResultRetcodeDescription(), (int)still_pending);
             }
          }
          else
          {
-            PrintFormat("[EddyTrader][INFO] Ordem pendente #%I64u (%s) cancelada com sucesso. Retcode %u (%s)",
-                        ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+            PrintFormat("[EddyTrader][INFO] Ordem pendente #%I64u (%s) confirmada como removida (retcode=%u, inventario=ticket ausente).",
+                        ticket, sym, trade_retcode);
          }
       }
    }
@@ -521,19 +527,27 @@ int ExecuteGlobalLiquidation(bool rate_limit_logs = false)
          string sym   = pos_symbols[i];
          if(ticket > 0)
          {
-            if(!g_trade.PositionClose(ticket, InpDeviationPoints))
+            // Confirmar retcode do servidor E ausencia da posicao por ticket.
+            // DONE_PARTIAL so e suficiente quando a reconciliacao nao encontra residuo.
+            bool request_sent = g_trade.PositionClose(ticket, InpDeviationPoints);
+            uint trade_retcode = g_trade.ResultRetcode();
+            bool server_executed = (trade_retcode == TRADE_RETCODE_DONE ||
+                                    trade_retcode == TRADE_RETCODE_DONE_PARTIAL);
+            bool still_open = PositionSelectByTicket(ticket);
+            if(!request_sent || !server_executed || still_open)
             {
                fail_count++;
                if(should_log)
                {
-                  PrintFormat("[EddyTrader][ERROR] FALHA ao liquidar posição #%I64u (%s): Retcode %u (%s)",
-                              ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+                  PrintFormat("[EddyTrader][ERROR] Liquidacao NAO confirmada #%I64u (%s): enviado=%d retcode=%u (%s), posicao_ainda_aberta=%d",
+                              ticket, sym, (int)request_sent, trade_retcode,
+                              g_trade.ResultRetcodeDescription(), (int)still_open);
                }
             }
             else
             {
-               PrintFormat("[EddyTrader][INFO] Posição #%I64u (%s) liquidada com sucesso. Retcode %u (%s)",
-                           ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+               PrintFormat("[EddyTrader][INFO] Posicao #%I64u (%s) confirmada como encerrada (retcode=%u, inventario=ticket ausente).",
+                           ticket, sym, trade_retcode);
             }
          }
       }
