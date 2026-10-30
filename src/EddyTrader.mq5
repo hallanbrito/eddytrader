@@ -94,6 +94,8 @@ datetime             g_t_unlock               = 0;
 ulong                g_protection_event_id    = 0;
 datetime             g_day_start              = 0;
 bool                 g_safe_to_operate        = false;
+// Diagnostico da consulta financeira: nao confundir falha de historico com zero contábil.
+bool                 g_financial_history_ok   = true;
 
 // Estado mutável do limite de perda e painel UX
 double                         g_max_loss               = 500.0;
@@ -378,13 +380,15 @@ double CalculateRealizedResultToday(datetime t_start_day, datetime t_now)
 
    if(!HistorySelect(t_start_day, t_now))
    {
-      PrintFormat("[EddyTrader][WARN] HistorySelect(%s, %s) falhou. Erro: %d",
+      g_financial_history_ok = false;
+      PrintFormat("[EddyTrader][CRITICAL] HistorySelect(%s, %s) falhou (erro %d): resultado financeiro INDISPONIVEL.",
                   TimeToString(t_start_day, TIME_DATE|TIME_SECONDS),
                   TimeToString(t_now, TIME_DATE|TIME_SECONDS),
                   GetLastError());
+      // Somente sentinela interna: chamadores devem verificar g_financial_history_ok.
       return 0.0;
    }
-
+   g_financial_history_ok = true;
    double realized = 0.0;
    int total_deals = HistoryDealsTotal();
    for(int i = 0; i < total_deals; i++)
@@ -417,9 +421,14 @@ double CalculateFloatingResult()
    return AccountInfoDouble(ACCOUNT_PROFIT);
 }
 
-double CalculateConsolidatedResult(datetime t_start_day, datetime t_now)
+bool TryCalculateConsolidatedResult(datetime t_start_day, datetime t_now, double &result)
 {
-   return CalculateRealizedResultToday(t_start_day, t_now) + CalculateFloatingResult();
+   result = 0.0;
+   double realized = CalculateRealizedResultToday(t_start_day, t_now);
+   if(!g_financial_history_ok)
+      return false;
+   result = realized + CalculateFloatingResult();
+   return true;
 }
 
 double CalculateWindowResult(double D, double baseline)
@@ -959,7 +968,7 @@ void UI_ShowConfirmDialog()
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_NewLimit", dx + 14, dy + 58, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
 
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, (g_financial_history_ok ? StringFormat("Resultado do Ciclo: %+.2f %s", W, curr) : "Resultado do Ciclo: INDISPONIVEL"), res_clr, 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 108, "Aviso: Novo limite tem aplicacao imediata!", C'243,156,18', 8);
 
    // Botões: VOLTAR e CONFIRMAR
@@ -1090,7 +1099,7 @@ void RenderCollapsedHUD()
 
    // 3. Resultado & Limite
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   string finance_txt = StringFormat("%+.2f / -%.2f %s", W, g_max_loss, curr);
+   string finance_txt = g_financial_history_ok ? StringFormat("%+.2f / -%.2f %s", W, g_max_loss, curr) : "RESULTADO INDISPONIVEL";
    UI_SetLabel(EDDY_UI_PREFIX + "Min_Finance", 220, 5, finance_txt, res_clr, 8);
 
    // 4. Botão Maximizar [ + ]
@@ -1158,7 +1167,7 @@ void RenderCompactHUD()
    // 3. Resultado do ciclo atual (W = D - Bn)
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Lbl", 12, 52, "Resultado:", C'150,160,175', 8);
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, StringFormat("%+.2f %s", W, curr), res_clr, 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, (g_financial_history_ok ? StringFormat("%+.2f %s", W, curr) : "INDISPONIVEL"), res_clr, 8, true);
 
    // 4. Limite Atual
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Limit_Lbl", 12, 72, "Limite Atual:", C'150,160,175', 8);
@@ -1212,7 +1221,7 @@ void RenderCompactHUD()
    {
       int dx = 0, dy = 0;
       GetDialogPosition(dx, dy);
-      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
+      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, (g_financial_history_ok ? StringFormat("Resultado do Ciclo: %+.2f %s", W, curr) : "Resultado do Ciclo: INDISPONIVEL"), res_clr, 8);
    }
 
    // NOTA: Enquanto em UI_STATE_EDITING, NÃO tocamos em Dlg_Input nem chamamos ChartRedraw(0) repetidamente a cada timer!
@@ -1300,16 +1309,16 @@ void RenderDetailedHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Val", 100, 72, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Lbl", 12, 94, "Realizado Hoje:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Val", 100, 94, StringFormat("%+.2f %s", R_day, curr), (R_day >= 0 ? C'46,204,113' : C'231,76,60'), 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Val", 100, 94, (g_financial_history_ok ? StringFormat("%+.2f %s", R_day, curr) : "INDISPONIVEL"), (R_day >= 0 ? C'46,204,113' : C'231,76,60'), 8);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Lbl", 12, 114, "Flutuante F(t):", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Val", 100, 114, StringFormat("%+.2f %s", F, curr), (F >= 0 ? C'46,204,113' : C'231,76,60'), 8);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Lbl", 12, 134, "Resultado Dia D:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 126, 134, StringFormat("%+.2f %s", D, curr), day_res_clr, 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 126, 134, (g_financial_history_ok ? StringFormat("%+.2f %s", D, curr) : "INDISPONIVEL"), day_res_clr, 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Lbl", 12, 154, "Resultado Ciclo W:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 126, 154, StringFormat("%+.2f %s", W, curr), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 126, 154, (g_financial_history_ok ? StringFormat("%+.2f %s", W, curr) : "INDISPONIVEL"), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Lbl", 12, 176, "Protecao / ID:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Val", 100, 176, (g_protection_event_id > 0 ? StringFormat("Evt #%I64u", g_protection_event_id) : "Nenhuma (Nominal)"), prot_clr, 8);
@@ -1446,8 +1455,18 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
       case EDDY_STATE_REOPENING:
       {
          datetime t_reopen = t_now;
+         double D_reopen = 0.0;
+         if(!TryCalculateConsolidatedResult(g_day_start, t_reopen, D_reopen))
+         {
+            // Preserva EventID e t_unlock: nenhuma baseline nova com dados incompletos.
+            PrintFormat("[EddyTrader][CRITICAL] REOPENING suspenso: historico indisponivel. Retendo BLOCKED (EventID=%I64u, Unlock=%s).",
+                        g_protection_event_id, TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
+            g_current_state = EDDY_STATE_BLOCKED;
+            g_safe_to_operate = false;
+            PersistState();
+            break;
+         }
          g_window_id++;
-         double D_reopen = CalculateConsolidatedResult(g_day_start, t_reopen);
          g_baseline = D_reopen;
 
          // Invariante de reabertura: W_(n+1)(t_reopen) == 0
@@ -1480,7 +1499,13 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
       case EDDY_STATE_MONITORING:
       {
          g_safe_to_operate = true;
-         PersistState();
+         if(!PersistState())
+         {
+            g_current_state = EDDY_STATE_INIT;
+            g_safe_to_operate = false;
+            PrintFormat("[EddyTrader][CRITICAL] MONITORING nao autorizado: persistencia falhou.");
+            break;
+         }
          PrintFormat("[EddyTrader][INFO] MONITORING ativo. Janela J%d | Baseline Bn=%.2f | Operação liberada.",
                      g_window_id, g_baseline);
          break;
@@ -1526,7 +1551,15 @@ void ProcessFSM()
 
       case EDDY_STATE_MONITORING:
       {
-         double D = CalculateConsolidatedResult(g_day_start, t_now);
+         double D = 0.0;
+         if(!TryCalculateConsolidatedResult(g_day_start, t_now, D))
+         {
+            // Sem dado financeiro confiavel: nao avaliar falso zero nem liberar configuracao.
+            // Reavaliar no proximo ciclo do timer; nao liquidar sem evidencia de limite.
+            g_safe_to_operate = false;
+            break;
+         }
+         g_safe_to_operate = true;
          double W = CalculateWindowResult(D, g_baseline);
 
          // T04: Avalia violação do limite financeiro da janela
