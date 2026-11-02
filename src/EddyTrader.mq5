@@ -94,6 +94,19 @@ datetime             g_t_unlock               = 0;
 ulong                g_protection_event_id    = 0;
 datetime             g_day_start              = 0;
 bool                 g_safe_to_operate        = false;
+// Diagnostico da consulta financeira: nao confundir falha de historico com zero contábil.
+bool                 g_financial_history_ok   = false;
+// Falha transitoria de historico separada de perda de ownership/persistencia.
+bool                 g_financial_degraded     = true;
+// Snapshot financeiro publicado exclusivamente pelo motor; o HUD nunca consulta HistorySelect.
+bool                 g_financial_snapshot_valid = false;
+double               g_financial_realized       = 0.0;
+double               g_financial_floating       = 0.0;
+double               g_financial_consolidated   = 0.0;
+datetime             g_financial_snapshot_time  = 0;
+bool                 g_persisted_state_present  = false;
+bool                 g_persisted_state_corrupt  = false;
+bool                 g_persistence_ok           = false;
 
 // Estado mutável do limite de perda e painel UX
 double                         g_max_loss               = 500.0;
@@ -110,6 +123,9 @@ ulong                g_account_login          = 0;
 ulong                g_instance_id            = 0;
 bool                 g_is_owner               = false;
 CTrade               g_trade;
+ulong                g_next_liquidation_attempt_ms = 0;
+ulong                g_next_cancel_attempt_ms      = 0;
+datetime             g_last_containment_warning    = 0;
 
 //+------------------------------------------------------------------+
 //| Funções Auxiliares de Tempo e Servidor                           |
@@ -152,39 +168,188 @@ string GVConfigKey(const string suffix)
    return StringFormat("EDDY_%I64u_CONFIG_%s", g_account_login, suffix);
 }
 
-bool PersistState()
+string GVStateSlotKey(const int slot, const string suffix)
+{
+   return GVKey(StringFormat("STATE_S%d_%s", slot, suffix));
+}
+
+bool GVWriteChecked(const string key, const double value)
 {
    ResetLastError();
-   bool ok = true;
-   if(GlobalVariableSet(GVKey("STATE"), (double)g_current_state) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("WINDOW_ID"), (double)g_window_id) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("BASELINE"), g_baseline) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("T_TRIGGER"), (double)g_t_trigger) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("T_UNLOCK"), (double)g_t_unlock) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("EVENT_ID"), (double)g_protection_event_id) == 0 && GetLastError() != 0) ok = false;
-   if(GlobalVariableSet(GVKey("DAY"), (double)g_day_start) == 0 && GetLastError() != 0) ok = false;
+   datetime modified = GlobalVariableSet(key, value);
+   int set_error = GetLastError();
+   if(modified == 0 && set_error != 0)
+      return false;
+
+   double read_back = 0.0;
+   if(!GlobalVariableGet(key, read_back))
+      return false;
+   return (read_back == value);
+}
+
+bool GVReadRequired(const string key, double &value)
+{
+   if(!GlobalVariableCheck(key))
+      return false;
+   ResetLastError();
+   return GlobalVariableGet(key, value);
+}
+
+bool ReadStateSlot(const int slot, const ulong expected_generation, EddyRecoveryState &state)
+{
+   double generation = 0.0;
+   double raw_state = 0.0;
+   double raw_window = 0.0;
+   double raw_baseline = 0.0;
+   double raw_trigger = 0.0;
+   double raw_unlock = 0.0;
+   double raw_event = 0.0;
+   double raw_day = 0.0;
+
+   if(!GVReadRequired(GVStateSlotKey(slot, "GEN"), generation) ||
+      (ulong)generation != expected_generation ||
+      !GVReadRequired(GVStateSlotKey(slot, "STATE"), raw_state) ||
+      !GVReadRequired(GVStateSlotKey(slot, "WINDOW_ID"), raw_window) ||
+      !GVReadRequired(GVStateSlotKey(slot, "BASELINE"), raw_baseline) ||
+      !GVReadRequired(GVStateSlotKey(slot, "T_TRIGGER"), raw_trigger) ||
+      !GVReadRequired(GVStateSlotKey(slot, "T_UNLOCK"), raw_unlock) ||
+      !GVReadRequired(GVStateSlotKey(slot, "EVENT_ID"), raw_event) ||
+      !GVReadRequired(GVStateSlotKey(slot, "DAY"), raw_day))
+      return false;
+
+   int state_value = (int)raw_state;
+   if(state_value < (int)EDDY_STATE_INIT || state_value > (int)EDDY_STATE_REOPENING)
+      return false;
+
+   state.state               = (ENUM_EDDY_STATE)state_value;
+   state.window_id           = (int)raw_window;
+   state.baseline            = raw_baseline;
+   state.t_trigger           = (datetime)raw_trigger;
+   state.t_unlock            = (datetime)raw_unlock;
+   state.protection_event_id = (ulong)raw_event;
+   state.day_timestamp       = (datetime)raw_day;
+   return true;
+}
+
+bool PersistState()
+{
+   // Dois slots + marcador de geracao: o marcador e gravado por ultimo e funciona
+   // como commit atomico. Um write parcial nunca substitui o ultimo snapshot valido.
+   double raw_generation = 0.0;
+   ulong current_generation = 0;
+   if(GlobalVariableCheck(GVKey("STATE_GEN")))
+   {
+      if(!GVReadRequired(GVKey("STATE_GEN"), raw_generation) || raw_generation < 0.0)
+      {
+         g_safe_to_operate = false;
+         return false;
+      }
+      current_generation = (ulong)raw_generation;
+      if((double)current_generation != raw_generation)
+      {
+         g_safe_to_operate = false;
+         return false;
+      }
+   }
+
+   ulong next_generation = current_generation + 1;
+   int slot = (int)(next_generation % 2);
+   bool ok =
+      GVWriteChecked(GVStateSlotKey(slot, "STATE"), (double)g_current_state) &&
+      GVWriteChecked(GVStateSlotKey(slot, "WINDOW_ID"), (double)g_window_id) &&
+      GVWriteChecked(GVStateSlotKey(slot, "BASELINE"), g_baseline) &&
+      GVWriteChecked(GVStateSlotKey(slot, "T_TRIGGER"), (double)g_t_trigger) &&
+      GVWriteChecked(GVStateSlotKey(slot, "T_UNLOCK"), (double)g_t_unlock) &&
+      GVWriteChecked(GVStateSlotKey(slot, "EVENT_ID"), (double)g_protection_event_id) &&
+      GVWriteChecked(GVStateSlotKey(slot, "DAY"), (double)g_day_start) &&
+      GVWriteChecked(GVStateSlotKey(slot, "GEN"), (double)next_generation);
+
+   EddyRecoveryState verify;
+   if(ok)
+      ok = ReadStateSlot(slot, next_generation, verify);
+   // Garante durabilidade do slot completo antes de publicar o marcador de commit.
+   if(ok)
+      GlobalVariablesFlush();
+   if(ok)
+      ok = GVWriteChecked(GVKey("STATE_GEN"), (double)next_generation);
    GlobalVariablesFlush();
 
    if(!ok)
    {
-      PrintFormat("[EddyTrader][CRITICAL] Falha na persistência de variáveis globais! Erro MT5: %d", GetLastError());
+      PrintFormat("[EddyTrader][CRITICAL] Falha no commit atomico do estado (geracao %I64u, slot %d)! Erro MT5: %d",
+                  next_generation, slot, GetLastError());
       g_safe_to_operate = false;
+      g_persistence_ok = false;
+   }
+   else
+   {
+      g_persistence_ok = true;
    }
    return ok;
 }
 
 bool LoadState(EddyRecoveryState &state)
 {
+   g_persisted_state_present = false;
+   g_persisted_state_corrupt = false;
+
+   // Formato transacional W10.4. Marcador presente com slot invalido e corrupcao,
+   // portanto nao ha fallback silencioso para as chaves legadas.
+   if(GlobalVariableCheck(GVKey("STATE_GEN")))
+   {
+      g_persisted_state_present = true;
+      double raw_generation = 0.0;
+      if(!GVReadRequired(GVKey("STATE_GEN"), raw_generation) || raw_generation < 1.0)
+      {
+         g_persisted_state_corrupt = true;
+         return false;
+      }
+      ulong generation = (ulong)raw_generation;
+      bool loaded = ReadStateSlot((int)(generation % 2), generation, state);
+      g_persisted_state_corrupt = !loaded;
+      return loaded;
+   }
+
+   // Migracao de snapshots anteriores: todas as chaves sao obrigatorias.
+   double raw_state = 0.0;
+   double raw_window = 0.0;
+   double raw_baseline = 0.0;
+   double raw_trigger = 0.0;
+   double raw_unlock = 0.0;
+   double raw_event = 0.0;
+   double raw_day = 0.0;
    if(!GlobalVariableCheck(GVKey("STATE")))
       return false;
+   g_persisted_state_present = true;
+   if(!GVReadRequired(GVKey("STATE"), raw_state))
+   {
+      g_persisted_state_corrupt = true;
+      return false;
+   }
+   if(!GVReadRequired(GVKey("WINDOW_ID"), raw_window) ||
+      !GVReadRequired(GVKey("BASELINE"), raw_baseline) ||
+      !GVReadRequired(GVKey("T_TRIGGER"), raw_trigger) ||
+      !GVReadRequired(GVKey("T_UNLOCK"), raw_unlock) ||
+      !GVReadRequired(GVKey("EVENT_ID"), raw_event) ||
+      !GVReadRequired(GVKey("DAY"), raw_day))
+   {
+      g_persisted_state_corrupt = true;
+      return false;
+   }
 
-   state.state               = (ENUM_EDDY_STATE)(int)GlobalVariableGet(GVKey("STATE"));
-   state.window_id           = (int)GlobalVariableGet(GVKey("WINDOW_ID"));
-   state.baseline            = GlobalVariableGet(GVKey("BASELINE"));
-   state.t_trigger           = (datetime)GlobalVariableGet(GVKey("T_TRIGGER"));
-   state.t_unlock            = (datetime)GlobalVariableGet(GVKey("T_UNLOCK"));
-   state.protection_event_id = (ulong)GlobalVariableGet(GVKey("EVENT_ID"));
-   state.day_timestamp       = (datetime)GlobalVariableGet(GVKey("DAY"));
+   int state_value = (int)raw_state;
+   if(state_value < (int)EDDY_STATE_INIT || state_value > (int)EDDY_STATE_REOPENING)
+   {
+      g_persisted_state_corrupt = true;
+      return false;
+   }
+   state.state               = (ENUM_EDDY_STATE)state_value;
+   state.window_id           = (int)raw_window;
+   state.baseline            = raw_baseline;
+   state.t_trigger           = (datetime)raw_trigger;
+   state.t_unlock            = (datetime)raw_unlock;
+   state.protection_event_id = (ulong)raw_event;
+   state.day_timestamp       = (datetime)raw_day;
    return true;
 }
 
@@ -200,6 +365,18 @@ void ClearState()
    GlobalVariableDel(GVKey("T_UNLOCK"));
    GlobalVariableDel(GVKey("EVENT_ID"));
    GlobalVariableDel(GVKey("DAY"));
+   GlobalVariableDel(GVKey("STATE_GEN"));
+   for(int slot = 0; slot < 2; slot++)
+   {
+      GlobalVariableDel(GVStateSlotKey(slot, "GEN"));
+      GlobalVariableDel(GVStateSlotKey(slot, "STATE"));
+      GlobalVariableDel(GVStateSlotKey(slot, "WINDOW_ID"));
+      GlobalVariableDel(GVStateSlotKey(slot, "BASELINE"));
+      GlobalVariableDel(GVStateSlotKey(slot, "T_TRIGGER"));
+      GlobalVariableDel(GVStateSlotKey(slot, "T_UNLOCK"));
+      GlobalVariableDel(GVStateSlotKey(slot, "EVENT_ID"));
+      GlobalVariableDel(GVStateSlotKey(slot, "DAY"));
+   }
    GlobalVariablesFlush();
 }
 
@@ -314,10 +491,10 @@ bool AcquireInstanceGuard()
    return false;
 }
 
-void UpdateHeartbeat()
+bool VerifyInstanceOwnership()
 {
    if(!g_is_owner)
-      return;
+      return false;
 
    string owner_key = GVKey("INSTANCE_OWNER");
    if(!GlobalVariableCheck(owner_key) || (ulong)GlobalVariableGet(owner_key) != g_instance_id)
@@ -330,8 +507,15 @@ void UpdateHeartbeat()
       g_current_state   = EDDY_STATE_INIT;
       EventKillTimer();
       // Invariante de contenção: não encerra posições, não altera FSM da conta e não altera o lock de terceiros
-      return;
+      return false;
    }
+   return true;
+}
+
+void UpdateHeartbeat()
+{
+   if(!VerifyInstanceOwnership())
+      return;
 
    GlobalVariableSet(GVKey("HEARTBEAT"), (double)TimeCurrent());
 }
@@ -371,28 +555,63 @@ void ReleaseInstanceGuard()
 //+------------------------------------------------------------------+
 //| Cálculos Financeiros Normativos (W03 / ADR 0002 / ADR 0003)      |
 //+------------------------------------------------------------------+
-double CalculateRealizedResultToday(datetime t_start_day, datetime t_now)
+void LogFinancialDataError(const string detail, const int error_code)
 {
+   static datetime s_last_history_error_log = 0;
+   datetime log_now = TimeCurrent();
+   if(s_last_history_error_log == 0 || log_now < s_last_history_error_log ||
+      log_now - s_last_history_error_log >= 30)
+   {
+      PrintFormat("[EddyTrader][CRITICAL] Dados financeiros INDISPONIVEIS: %s (erro %d).",
+                  detail, error_code);
+      s_last_history_error_log = log_now;
+   }
+}
+
+bool TryCalculateRealizedResultToday(datetime t_start_day,
+                                     datetime t_now,
+                                     double &realized,
+                                     int &selected_deals)
+{
+   realized = 0.0;
+   selected_deals = 0;
    if(t_now <= 0) t_now = GetServerTimeSafe();
    if(t_start_day <= 0) t_start_day = GetDayStart(t_now);
 
+   ResetLastError();
    if(!HistorySelect(t_start_day, t_now))
    {
-      PrintFormat("[EddyTrader][WARN] HistorySelect(%s, %s) falhou. Erro: %d",
-                  TimeToString(t_start_day, TIME_DATE|TIME_SECONDS),
-                  TimeToString(t_now, TIME_DATE|TIME_SECONDS),
-                  GetLastError());
-      return 0.0;
+      LogFinancialDataError(StringFormat("HistorySelect(%s, %s) falhou",
+                                         TimeToString(t_start_day, TIME_DATE|TIME_SECONDS),
+                                         TimeToString(t_now, TIME_DATE|TIME_SECONDS)),
+                            GetLastError());
+      return false;
    }
 
-   double realized = 0.0;
-   int total_deals = HistoryDealsTotal();
-   for(int i = 0; i < total_deals; i++)
+   selected_deals = HistoryDealsTotal();
+   if(selected_deals < 0)
    {
+      LogFinancialDataError("HistoryDealsTotal retornou contagem invalida", GetLastError());
+      return false;
+   }
+   for(int i = 0; i < selected_deals; i++)
+   {
+      ResetLastError();
       ulong ticket = HistoryDealGetTicket(i);
-      if(ticket == 0) continue;
+      if(ticket == 0)
+      {
+         LogFinancialDataError(StringFormat("HistoryDealGetTicket(%d) retornou zero", i), GetLastError());
+         return false;
+      }
 
-      ENUM_DEAL_TYPE deal_type = (ENUM_DEAL_TYPE)HistoryDealGetInteger(ticket, DEAL_TYPE);
+      long raw_deal_type = 0;
+      ResetLastError();
+      if(!HistoryDealGetInteger(ticket, DEAL_TYPE, raw_deal_type))
+      {
+         LogFinancialDataError(StringFormat("DEAL_TYPE indisponivel para deal #%I64u", ticket), GetLastError());
+         return false;
+      }
+      ENUM_DEAL_TYPE deal_type = (ENUM_DEAL_TYPE)raw_deal_type;
 
       // Exclusão estrita de movimentações de capital (depósitos, saques, créditos)
       if(deal_type == DEAL_TYPE_BALANCE || deal_type == DEAL_TYPE_CREDIT)
@@ -401,15 +620,25 @@ double CalculateRealizedResultToday(datetime t_start_day, datetime t_now)
       // Inclusão exclusiva de operações econômicas de negociação
       if(deal_type == DEAL_TYPE_BUY || deal_type == DEAL_TYPE_SELL)
       {
-         double profit     = HistoryDealGetDouble(ticket, DEAL_PROFIT);
-         double commission = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
-         double swap       = HistoryDealGetDouble(ticket, DEAL_SWAP);
-         double fee        = HistoryDealGetDouble(ticket, DEAL_FEE);
+         double profit = 0.0;
+         double commission = 0.0;
+         double swap = 0.0;
+         double fee = 0.0;
+         ResetLastError();
+         if(!HistoryDealGetDouble(ticket, DEAL_PROFIT, profit) ||
+            !HistoryDealGetDouble(ticket, DEAL_COMMISSION, commission) ||
+            !HistoryDealGetDouble(ticket, DEAL_SWAP, swap) ||
+            !HistoryDealGetDouble(ticket, DEAL_FEE, fee))
+         {
+            LogFinancialDataError(StringFormat("propriedade financeira indisponivel para deal #%I64u", ticket),
+                                  GetLastError());
+            return false;
+         }
 
          realized += (profit + commission + swap + fee);
       }
    }
-   return realized;
+   return true;
 }
 
 double CalculateFloatingResult()
@@ -417,14 +646,60 @@ double CalculateFloatingResult()
    return AccountInfoDouble(ACCOUNT_PROFIT);
 }
 
-double CalculateConsolidatedResult(datetime t_start_day, datetime t_now)
+bool TryCalculateConsolidatedResult(datetime t_start_day, datetime t_now, double &result)
 {
-   return CalculateRealizedResultToday(t_start_day, t_now) + CalculateFloatingResult();
+   result = 0.0;
+   double realized = 0.0;
+   int selected_deals = 0;
+
+   if(!TryCalculateRealizedResultToday(t_start_day, t_now, realized, selected_deals))
+   {
+      g_financial_history_ok = false;
+      g_financial_degraded = true;
+      g_financial_snapshot_valid = false;
+      g_safe_to_operate = false;
+      return false;
+   }
+
+   // O segundo HistorySelect detecta mudança da lista enquanto R(t) e F(t) eram
+   // amostrados. Nesse caso o ciclo e descartado para evitar dupla contagem/omissao.
+   double floating = CalculateFloatingResult();
+   ResetLastError();
+   if(!HistorySelect(t_start_day, t_now) || HistoryDealsTotal() != selected_deals)
+   {
+      LogFinancialDataError("historico mudou durante a formacao do snapshot", GetLastError());
+      g_financial_history_ok = false;
+      g_financial_degraded = true;
+      g_financial_snapshot_valid = false;
+      g_safe_to_operate = false;
+      return false;
+   }
+
+   result = realized + floating;
+   g_financial_realized = realized;
+   g_financial_floating = floating;
+   g_financial_consolidated = result;
+   g_financial_snapshot_time = t_now;
+   g_financial_snapshot_valid = true;
+   g_financial_history_ok = true;
+   return true;
 }
 
 double CalculateWindowResult(double D, double baseline)
 {
    return D - baseline;
+}
+
+bool FinancialSnapshotAvailable()
+{
+   if(!g_financial_snapshot_valid || !g_financial_history_ok || g_financial_degraded)
+      return false;
+
+   datetime now = GetServerTimeSafe();
+   int max_age_seconds = ((InpTimerIntervalMs * 3 + 999) / 1000) + 2;
+   if(g_financial_snapshot_time <= 0 || now < g_financial_snapshot_time)
+      return false;
+   return ((now - g_financial_snapshot_time) <= max_age_seconds);
 }
 
 //+------------------------------------------------------------------+
@@ -441,11 +716,33 @@ bool CheckSafetyConditions()
    return true;
 }
 
+bool ShouldLogContainmentWarning()
+{
+   datetime now = TimeCurrent();
+   if(g_last_containment_warning == 0 ||
+      now < g_last_containment_warning ||
+      now - g_last_containment_warning >= 5)
+   {
+      g_last_containment_warning = now;
+      return true;
+   }
+   return false;
+}
+
 //+------------------------------------------------------------------+
 //| Operações de Liquidação Compulsória Global (ADR 0005)            |
 //+------------------------------------------------------------------+
 int CancelPendingOrders(bool rate_limit_logs = false)
 {
+   if(!VerifyInstanceOwnership())
+      return 1;
+
+   ulong now_ms = GetTickCount64();
+   if(rate_limit_logs && now_ms < g_next_cancel_attempt_ms)
+      return 0;
+   ulong retry_ms = (InpTimerIntervalMs < 250) ? 250 : (ulong)InpTimerIntervalMs;
+   g_next_cancel_attempt_ms = now_ms + retry_ms;
+
    int fail_count = 0;
    int total_orders = OrdersTotal();
    if(total_orders <= 0) return 0;
@@ -457,12 +754,22 @@ int CancelPendingOrders(bool rate_limit_logs = false)
    for(int i = 0; i < total_orders; i++)
    {
       order_tickets[i] = OrderGetTicket(i);
-      order_symbols[i] = OrderGetString(ORDER_SYMBOL);
+      if(order_tickets[i] == 0)
+      {
+         fail_count++;
+         order_symbols[i] = "";
+      }
+      else
+      {
+         order_symbols[i] = OrderGetString(ORDER_SYMBOL);
+      }
    }
 
    static datetime s_last_cancel_log = 0;
    datetime now = TimeCurrent();
    bool should_log = (!rate_limit_logs || (now - s_last_cancel_log >= 5));
+   if(should_log && fail_count > 0)
+      PrintFormat("[EddyTrader][ERROR] Inventario de ordens mudou durante a coleta (%d item(ns) sem ticket). Sera reconciliado no proximo ciclo.", fail_count);
 
    for(int i = 0; i < total_orders; i++)
    {
@@ -470,19 +777,25 @@ int CancelPendingOrders(bool rate_limit_logs = false)
       string sym   = order_symbols[i];
       if(ticket > 0)
       {
-         if(!g_trade.OrderDelete(ticket))
+         // O booleano do CTrade atesta a solicitacao local, NAO sua execucao no servidor.
+         bool request_sent = g_trade.OrderDelete(ticket);
+         uint trade_retcode = g_trade.ResultRetcode();
+         bool server_done = (trade_retcode == TRADE_RETCODE_DONE);
+         bool still_pending = OrderSelect(ticket);
+         if(!request_sent || !server_done || still_pending)
          {
             fail_count++;
             if(should_log)
             {
-               PrintFormat("[EddyTrader][ERROR] FALHA ao cancelar ordem pendente #%I64u (%s): Retcode %u (%s)",
-                           ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+               PrintFormat("[EddyTrader][ERROR] Cancelamento NAO confirmado #%I64u (%s): enviado=%d retcode=%u (%s), ainda_pendente=%d",
+                           ticket, sym, (int)request_sent, trade_retcode,
+                           g_trade.ResultRetcodeDescription(), (int)still_pending);
             }
          }
          else
          {
-            PrintFormat("[EddyTrader][INFO] Ordem pendente #%I64u (%s) cancelada com sucesso. Retcode %u (%s)",
-                        ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+            PrintFormat("[EddyTrader][INFO] Ordem pendente #%I64u (%s) confirmada como removida (retcode=%u, inventario=ticket ausente).",
+                        ticket, sym, trade_retcode);
          }
       }
    }
@@ -494,6 +807,15 @@ int CancelPendingOrders(bool rate_limit_logs = false)
 
 int ExecuteGlobalLiquidation(bool rate_limit_logs = false)
 {
+   if(!VerifyInstanceOwnership())
+      return 1;
+
+   ulong now_ms = GetTickCount64();
+   if(rate_limit_logs && now_ms < g_next_liquidation_attempt_ms)
+      return 0;
+   ulong retry_ms = (InpTimerIntervalMs < 250) ? 250 : (ulong)InpTimerIntervalMs;
+   g_next_liquidation_attempt_ms = now_ms + retry_ms;
+
    int fail_count = 0;
 
    // 1. Coleta prévia e estável de todos os tickets e símbolos de posições abertas
@@ -507,12 +829,22 @@ int ExecuteGlobalLiquidation(bool rate_limit_logs = false)
       for(int i = 0; i < total_pos; i++)
       {
          pos_tickets[i] = PositionGetTicket(i);
-         pos_symbols[i] = PositionGetString(POSITION_SYMBOL);
+         if(pos_tickets[i] == 0)
+         {
+            fail_count++;
+            pos_symbols[i] = "";
+         }
+         else
+         {
+            pos_symbols[i] = PositionGetString(POSITION_SYMBOL);
+         }
       }
 
       static datetime s_last_pos_log = 0;
       datetime now = TimeCurrent();
       bool should_log = (!rate_limit_logs || (now - s_last_pos_log >= 5));
+      if(should_log && fail_count > 0)
+         PrintFormat("[EddyTrader][ERROR] Inventario de posicoes mudou durante a coleta (%d item(ns) sem ticket). Sera reconciliado no proximo ciclo.", fail_count);
 
       // 2. Fechamento compulsório desacoplado por ticket individual (universal Netting/Hedging)
       for(int i = 0; i < total_pos; i++)
@@ -521,19 +853,27 @@ int ExecuteGlobalLiquidation(bool rate_limit_logs = false)
          string sym   = pos_symbols[i];
          if(ticket > 0)
          {
-            if(!g_trade.PositionClose(ticket, InpDeviationPoints))
+            // Confirmar retcode do servidor E ausencia da posicao por ticket.
+            // DONE_PARTIAL so e suficiente quando a reconciliacao nao encontra residuo.
+            bool request_sent = g_trade.PositionClose(ticket, InpDeviationPoints);
+            uint trade_retcode = g_trade.ResultRetcode();
+            bool server_executed = (trade_retcode == TRADE_RETCODE_DONE ||
+                                    trade_retcode == TRADE_RETCODE_DONE_PARTIAL);
+            bool still_open = PositionSelectByTicket(ticket);
+            if(!request_sent || !server_executed || still_open)
             {
                fail_count++;
                if(should_log)
                {
-                  PrintFormat("[EddyTrader][ERROR] FALHA ao liquidar posição #%I64u (%s): Retcode %u (%s)",
-                              ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+                  PrintFormat("[EddyTrader][ERROR] Liquidacao NAO confirmada #%I64u (%s): enviado=%d retcode=%u (%s), posicao_ainda_aberta=%d",
+                              ticket, sym, (int)request_sent, trade_retcode,
+                              g_trade.ResultRetcodeDescription(), (int)still_open);
                }
             }
             else
             {
-               PrintFormat("[EddyTrader][INFO] Posição #%I64u (%s) liquidada com sucesso. Retcode %u (%s)",
-                           ticket, sym, g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+               PrintFormat("[EddyTrader][INFO] Posicao #%I64u (%s) confirmada como encerrada (retcode=%u, inventario=ticket ausente).",
+                           ticket, sym, trade_retcode);
             }
          }
       }
@@ -661,11 +1001,15 @@ bool SetMaxLossConfig(double new_limit, string &err_msg)
    }
 
    // Regra inegociável de segurança: só permite alteração em MONITORING com safe_to_operate == true
-   if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate)
+   if(!VerifyInstanceOwnership() ||
+      g_current_state != EDDY_STATE_MONITORING ||
+      !g_safe_to_operate ||
+      !FinancialSnapshotAvailable())
    {
-      err_msg = "Alteracao proibida: EA nao esta em MONITORING seguro.";
-      PrintFormat("[EddyTrader][WARN] Tentativa de alterar limite de perda rejeitada! Estado=%s, safe_to_operate=%d",
-                  EnumToString(g_current_state), (int)g_safe_to_operate);
+      err_msg = "Alteracao proibida: EA nao esta em MONITORING financeiro seguro.";
+      PrintFormat("[EddyTrader][WARN] Tentativa de alterar limite rejeitada! Estado=%s, safe=%d, owner=%d, financeiro=%d",
+                  EnumToString(g_current_state), (int)g_safe_to_operate,
+                  (int)g_is_owner, (int)FinancialSnapshotAvailable());
       return false;
    }
 
@@ -884,7 +1228,10 @@ void GetDialogPosition(int &dlg_x, int &dlg_y)
 
 void UI_OpenConfigDialog()
 {
-   if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate || !g_is_owner)
+   if(g_current_state != EDDY_STATE_MONITORING ||
+      !g_safe_to_operate ||
+      !VerifyInstanceOwnership() ||
+      !FinancialSnapshotAvailable())
    {
       Print("[EddyTrader][WARN] Configuração indisponível fora de MONITORING seguro.");
       return;
@@ -921,14 +1268,23 @@ void UI_OpenConfigDialog()
 
 void UI_ShowConfirmDialog()
 {
+   if(g_current_state != EDDY_STATE_MONITORING ||
+      !g_safe_to_operate ||
+      !VerifyInstanceOwnership() ||
+      !FinancialSnapshotAvailable())
+   {
+      Print("[EddyTrader][WARN] Confirmacao cancelada: snapshot financeiro deixou de ser confiavel.");
+      UI_CloseConfigDialog();
+      return;
+   }
+
    int dx = 0, dy = 0;
    GetDialogPosition(dx, dy);
    string curr = AccountInfoString(ACCOUNT_CURRENCY);
 
-   datetime t_now = GetServerTimeSafe();
-   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
-   double F       = CalculateFloatingResult();
-   double D       = R_day + F;
+   double R_day   = g_financial_realized;
+   double F       = g_financial_floating;
+   double D       = g_financial_consolidated;
    double W       = CalculateWindowResult(D, g_baseline);
 
    g_config_ui_state = UI_STATE_CONFIRMING;
@@ -945,7 +1301,7 @@ void UI_ShowConfirmDialog()
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_NewLimit", dx + 14, dy + 58, StringFormat("NOVO LIMITE: %.2f %s", g_pending_max_loss, curr), clrWhite, 9, true);
 
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, (FinancialSnapshotAvailable() ? StringFormat("Resultado do Ciclo: %+.2f %s", W, curr) : "Resultado do Ciclo: INDISPONIVEL"), res_clr, 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Dlg_Err", dx + 14, dy + 108, "Aviso: Novo limite tem aplicacao imediata!", C'243,156,18', 8);
 
    // Botões: VOLTAR e CONFIRMAR
@@ -1002,15 +1358,15 @@ void UI_CloseConfigDialog()
 //+------------------------------------------------------------------+
 void RenderCollapsedHUD()
 {
+   datetime t_now = GetServerTimeSafe();
    Comment("");
    UI_CloseConfigDialog();
    if(ObjectFind(0, EDDY_UI_PREFIX + "Hud_CardBg") >= 0) UI_DeleteHUD();
    if(ObjectFind(0, EDDY_UI_PREFIX + "Det_Bg") >= 0)     UI_DeleteDetailed();
 
-   datetime t_now = GetServerTimeSafe();
-   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
-   double F       = CalculateFloatingResult();
-   double D       = R_day + F;
+   double R_day   = g_financial_realized;
+   double F       = g_financial_floating;
+   double D       = g_financial_consolidated;
    double W       = CalculateWindowResult(D, g_baseline);
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
 
@@ -1076,7 +1432,7 @@ void RenderCollapsedHUD()
 
    // 3. Resultado & Limite
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   string finance_txt = StringFormat("%+.2f / -%.2f %s", W, g_max_loss, curr);
+   string finance_txt = FinancialSnapshotAvailable() ? StringFormat("%+.2f / -%.2f %s", W, g_max_loss, curr) : "RESULTADO INDISPONIVEL";
    UI_SetLabel(EDDY_UI_PREFIX + "Min_Finance", 220, 5, finance_txt, res_clr, 8);
 
    // 4. Botão Maximizar [ + ]
@@ -1087,12 +1443,14 @@ void RenderCollapsedHUD()
 
 void RenderCompactHUD()
 {
+   datetime t_now = GetServerTimeSafe();
    Comment(""); // Mantém área de comentário limpa no modo compacto
 
    // Se o estado mudou para não-MONITORING enquanto o diálogo estava aberto, fecha o diálogo por segurança
    if(g_config_ui_state != UI_STATE_IDLE)
    {
-      if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate || !g_is_owner)
+      if(g_current_state != EDDY_STATE_MONITORING || !g_safe_to_operate ||
+         !g_is_owner || !FinancialSnapshotAvailable())
       {
          UI_CloseConfigDialog();
       }
@@ -1108,10 +1466,9 @@ void RenderCompactHUD()
       UI_DeleteCollapsed();
    }
 
-   datetime t_now = GetServerTimeSafe();
-   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
-   double F       = CalculateFloatingResult();
-   double D       = R_day + F;
+   double R_day   = g_financial_realized;
+   double F       = g_financial_floating;
+   double D       = g_financial_consolidated;
    double W       = CalculateWindowResult(D, g_baseline);
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
@@ -1144,7 +1501,7 @@ void RenderCompactHUD()
    // 3. Resultado do ciclo atual (W = D - Bn)
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Lbl", 12, 52, "Resultado:", C'150,160,175', 8);
    color res_clr = (W >= 0) ? C'46,204,113' : C'231,76,60';
-   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, StringFormat("%+.2f %s", W, curr), res_clr, 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Hud_Res_Val", 80, 52, (FinancialSnapshotAvailable() ? StringFormat("%+.2f %s", W, curr) : "INDISPONIVEL"), res_clr, 8, true);
 
    // 4. Limite Atual
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Limit_Lbl", 12, 72, "Limite Atual:", C'150,160,175', 8);
@@ -1177,7 +1534,10 @@ void RenderCompactHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Hud_Ops_Val", 80, 112, ops_str, C'180,190,205', 8);
 
    // 7. Botões
-   bool can_configure = (g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner);
+   bool can_configure = (g_current_state == EDDY_STATE_MONITORING &&
+                         g_safe_to_operate &&
+                         g_is_owner &&
+                         FinancialSnapshotAvailable());
    if(can_configure)
    {
       string cfg_btn_txt = (g_config_ui_state != UI_STATE_IDLE) ? "CONFIGURANDO..." : "CONFIGURAR";
@@ -1198,7 +1558,7 @@ void RenderCompactHUD()
    {
       int dx = 0, dy = 0;
       GetDialogPosition(dx, dy);
-      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, StringFormat("Resultado do Ciclo: %+.2f %s", W, curr), res_clr, 8);
+      UI_SetLabel(EDDY_UI_PREFIX + "Dlg_CurResult", dx + 14, dy + 80, (FinancialSnapshotAvailable() ? StringFormat("Resultado do Ciclo: %+.2f %s", W, curr) : "Resultado do Ciclo: INDISPONIVEL"), res_clr, 8);
    }
 
    // NOTA: Enquanto em UI_STATE_EDITING, NÃO tocamos em Dlg_Input nem chamamos ChartRedraw(0) repetidamente a cada timer!
@@ -1210,6 +1570,7 @@ void RenderCompactHUD()
 
 void RenderDetailedHUD()
 {
+   datetime t_now = GetServerTimeSafe();
    // Fecha diálogo e limpa resíduos se estiver transitando para detalhado
    UI_CloseConfigDialog();
    if(ObjectFind(0, EDDY_UI_PREFIX + "Hud_CardBg") >= 0)
@@ -1224,10 +1585,9 @@ void RenderDetailedHUD()
    // Garante que o Comment() cru antigo nunca seja exibido na UI técnica
    Comment("");
 
-   datetime t_now = GetServerTimeSafe();
-   double R_day   = CalculateRealizedResultToday(g_day_start, t_now);
-   double F       = CalculateFloatingResult();
-   double D       = R_day + F;
+   double R_day   = g_financial_realized;
+   double F       = g_financial_floating;
+   double D       = g_financial_consolidated;
    double W       = CalculateWindowResult(D, g_baseline);
    string curr    = AccountInfoString(ACCOUNT_CURRENCY);
    string mode_str = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" : "DEMO";
@@ -1286,16 +1646,16 @@ void RenderDetailedHUD()
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Limit_Val", 100, 72, StringFormat("-%.2f %s", g_max_loss, curr), clrWhite, 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Lbl", 12, 94, "Realizado Hoje:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Val", 100, 94, StringFormat("%+.2f %s", R_day, curr), (R_day >= 0 ? C'46,204,113' : C'231,76,60'), 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Rday_Val", 100, 94, (FinancialSnapshotAvailable() ? StringFormat("%+.2f %s", R_day, curr) : "INDISPONIVEL"), (R_day >= 0 ? C'46,204,113' : C'231,76,60'), 8);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Lbl", 12, 114, "Flutuante F(t):", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Val", 100, 114, StringFormat("%+.2f %s", F, curr), (F >= 0 ? C'46,204,113' : C'231,76,60'), 8);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Float_Val", 100, 114, (FinancialSnapshotAvailable() ? StringFormat("%+.2f %s", F, curr) : "INDISPONIVEL"), (F >= 0 ? C'46,204,113' : C'231,76,60'), 8);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Lbl", 12, 134, "Resultado Dia D:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 126, 134, StringFormat("%+.2f %s", D, curr), day_res_clr, 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_Cons_Val", 126, 134, (FinancialSnapshotAvailable() ? StringFormat("%+.2f %s", D, curr) : "INDISPONIVEL"), day_res_clr, 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Lbl", 12, 154, "Resultado Ciclo W:", C'150,160,175', 8);
-   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 126, 154, StringFormat("%+.2f %s", W, curr), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
+   UI_SetLabel(EDDY_UI_PREFIX + "Det_WinRes_Val", 126, 154, (FinancialSnapshotAvailable() ? StringFormat("%+.2f %s", W, curr) : "INDISPONIVEL"), (W >= 0 ? C'46,204,113' : C'231,76,60'), 8, true);
 
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Lbl", 12, 176, "Protecao / ID:", C'150,160,175', 8);
    UI_SetLabel(EDDY_UI_PREFIX + "Det_Prot_Val", 100, 176, (g_protection_event_id > 0 ? StringFormat("Evt #%I64u", g_protection_event_id) : "Nenhuma (Nominal)"), prot_clr, 8);
@@ -1377,6 +1737,7 @@ void UpdateHUD()
 void TransitionTo(ENUM_EDDY_STATE target_state)
 {
    datetime t_now = GetServerTimeSafe();
+   ENUM_EDDY_STATE previous_state = g_current_state;
    PrintFormat("[EddyTrader][INFO] Transição FSM: %s -> %s (t=%s)",
                EnumToString(g_current_state), EnumToString(target_state),
                TimeToString(t_now, TIME_DATE|TIME_SECONDS));
@@ -1387,6 +1748,7 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
    {
       case EDDY_STATE_PROTECTION_TRIGGERED:
       {
+         g_safe_to_operate = false;
          // T04: Congelamento do gatilho e cálculo do bloqueio de 4 horas
          g_t_trigger = t_now;
          g_t_unlock  = g_t_trigger + (datetime)(InpBlockDurationHours * 3600);
@@ -1404,6 +1766,7 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
 
       case EDDY_STATE_LIQUIDATING:
       {
+         g_safe_to_operate = false;
          PersistState();
          ExecuteGlobalLiquidation(false);
 
@@ -1423,6 +1786,7 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
 
       case EDDY_STATE_BLOCKED:
       {
+         g_safe_to_operate = false;
          PersistState();
          PrintFormat("[EddyTrader][INFO] BLOCKED ativo. Desbloqueio programado para %s",
                      TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
@@ -1431,9 +1795,28 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
 
       case EDDY_STATE_REOPENING:
       {
+         // Snapshot anterior para rollback em memoria. O snapshot persistido anterior
+         // continua intacto se o commit de dois slots falhar.
+         int previous_window = g_window_id;
+         double previous_baseline = g_baseline;
+         datetime previous_trigger = g_t_trigger;
+         datetime previous_unlock = g_t_unlock;
+         ulong previous_event = g_protection_event_id;
+
          datetime t_reopen = t_now;
-         g_window_id++;
-         double D_reopen = CalculateConsolidatedResult(g_day_start, t_reopen);
+         double D_reopen = 0.0;
+         if(!TryCalculateConsolidatedResult(g_day_start, t_reopen, D_reopen))
+         {
+            // Preserva EventID e t_unlock: nenhuma baseline nova com dados incompletos.
+            PrintFormat("[EddyTrader][CRITICAL] REOPENING suspenso: historico indisponivel. Retendo BLOCKED (EventID=%I64u, Unlock=%s).",
+                        g_protection_event_id, TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
+            g_current_state = EDDY_STATE_BLOCKED;
+            g_financial_degraded = true;
+            g_safe_to_operate = false;
+            PersistState();
+            break;
+         }
+         g_window_id = previous_window + 1;
          g_baseline = D_reopen;
 
          // Invariante de reabertura: W_(n+1)(t_reopen) == 0
@@ -1446,27 +1829,45 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
          g_t_unlock            = 0;
          g_protection_event_id = 0;
 
-         // Persistência mandatória da baseline e estado antes de avançar para MONITORING
+         // Commit unico do estado final: nunca persiste REOPENING com evento arquivado.
+         g_current_state = EDDY_STATE_MONITORING;
+         g_financial_degraded = false;
+         g_safe_to_operate = true;
          if(PersistState())
          {
-            g_safe_to_operate = true;
-            TransitionTo(EDDY_STATE_MONITORING);
+            PrintFormat("[EddyTrader][INFO] Transição FSM: REOPENING -> MONITORING (commit atomico concluido). Janela J%d | Baseline Bn=%.2f",
+                        g_window_id, g_baseline);
          }
          else
          {
-            // Falha crítica na persistência da baseline: bloqueia retorno a MONITORING
-            PrintFormat("[EddyTrader][CRITICAL] Falha ao persistir baseline da janela J%d nas Global Variables! Retendo em INIT (fail-closed).",
-                        g_window_id);
-            g_current_state   = EDDY_STATE_INIT;
+            // Rollback integral em memoria; EventID e unlock continuam recuperaveis.
+            g_current_state = (previous_state == EDDY_STATE_MONITORING) ? EDDY_STATE_INIT : EDDY_STATE_BLOCKED;
+            g_window_id = previous_window;
+            g_baseline = previous_baseline;
+            g_t_trigger = previous_trigger;
+            g_t_unlock = previous_unlock;
+            g_protection_event_id = previous_event;
+            g_financial_degraded = true;
             g_safe_to_operate = false;
+            PrintFormat("[EddyTrader][CRITICAL] Falha ao persistir baseline da janela J%d! Rollback integral para %s, preservando EventID=%I64u e Unlock=%s.",
+                        previous_window + 1,
+                        EnumToString(g_current_state),
+                        g_protection_event_id,
+                        TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
          }
          break;
       }
 
       case EDDY_STATE_MONITORING:
       {
-         g_safe_to_operate = true;
-         PersistState();
+         g_safe_to_operate = FinancialSnapshotAvailable();
+         if(!PersistState())
+         {
+            g_current_state = EDDY_STATE_INIT;
+            g_safe_to_operate = false;
+            PrintFormat("[EddyTrader][CRITICAL] MONITORING nao autorizado: persistencia falhou.");
+            break;
+         }
          PrintFormat("[EddyTrader][INFO] MONITORING ativo. Janela J%d | Baseline Bn=%.2f | Operação liberada.",
                      g_window_id, g_baseline);
          break;
@@ -1487,7 +1888,7 @@ void TransitionTo(ENUM_EDDY_STATE target_state)
 void ProcessFSM()
 {
    // Guarda inegociável de ownership: se a instância perdeu ownership, recusa qualquer ação
-   if(!g_is_owner)
+   if(!VerifyInstanceOwnership())
    {
       g_safe_to_operate = false;
       g_current_state   = EDDY_STATE_INIT;
@@ -1512,7 +1913,27 @@ void ProcessFSM()
 
       case EDDY_STATE_MONITORING:
       {
-         double D = CalculateConsolidatedResult(g_day_start, t_now);
+         double D = 0.0;
+         if(!TryCalculateConsolidatedResult(g_day_start, t_now, D))
+         {
+            // Sem dado financeiro confiavel: nao avaliar falso zero nem liberar configuracao.
+            // Reavaliar no proximo ciclo do timer; nao liquidar sem evidencia de limite.
+            g_financial_degraded = true;
+            g_safe_to_operate = false;
+            break;
+         }
+         bool recovered_from_degraded = g_financial_degraded;
+         g_financial_degraded = false;
+         if(!g_persistence_ok && !PersistState())
+         {
+            g_safe_to_operate = false;
+            break;
+         }
+         g_safe_to_operate = g_persistence_ok;
+         if(recovered_from_degraded)
+         {
+            PrintFormat("[EddyTrader][INFO] Historico financeiro recuperado; MONITORING retomado com dados confiaveis.");
+         }
          double W = CalculateWindowResult(D, g_baseline);
 
          // T04: Avalia violação do limite financeiro da janela
@@ -1553,15 +1974,23 @@ void ProcessFSM()
          // Neutralização de intervenções residuais durante o bloqueio
          if(PositionsTotal() > 0 || OrdersTotal() > 0)
          {
-            PrintFormat("[EddyTrader][WARN] ALERTA: Exposição detectada durante BLOCKED! Executando neutralização.");
+            if(ShouldLogContainmentWarning())
+               PrintFormat("[EddyTrader][WARN] ALERTA: Exposição detectada durante BLOCKED! Executando neutralização.");
             ExecuteGlobalLiquidation(true);
          }
 
          // T13 / T14: Avalia alcance do tempo mínimo de 4 horas
          if(t_now >= g_t_unlock)
          {
-            if(CheckSafetyConditions())
+            bool infrastructure_safe = CheckSafetyConditions();
+            double reopen_result = 0.0;
+            bool financial_safe = false;
+            if(infrastructure_safe)
+               financial_safe = TryCalculateConsolidatedResult(g_day_start, t_now, reopen_result);
+
+            if(infrastructure_safe && financial_safe)
             {
+               g_financial_degraded = false;
                PrintFormat("[EddyTrader][INFO] T14: Tempo de bloqueio cumprido (%s >= %s) e condições seguras. Iniciando REOPENING.",
                            TimeToString(t_now, TIME_DATE|TIME_SECONDS),
                            TimeToString(g_t_unlock, TIME_DATE|TIME_SECONDS));
@@ -1569,8 +1998,15 @@ void ProcessFSM()
             }
             else
             {
-               PrintFormat("[EddyTrader][WARN] T13: Tempo cumprido mas safe_to_reopen == false (pos=%d, ord=%d, conn=%d). Retendo em BLOCKED.",
-                           PositionsTotal(), OrdersTotal(), (int)TerminalInfoInteger(TERMINAL_CONNECTED));
+               static datetime s_last_reopen_wait_log = 0;
+               if(s_last_reopen_wait_log == 0 || t_now < s_last_reopen_wait_log ||
+                  t_now - s_last_reopen_wait_log >= 30)
+               {
+                  PrintFormat("[EddyTrader][WARN] T13: Tempo cumprido mas safe_to_reopen == false (pos=%d, ord=%d, conn=%d, financeiro=%d). Retendo em BLOCKED.",
+                              PositionsTotal(), OrdersTotal(), (int)TerminalInfoInteger(TERMINAL_CONNECTED),
+                              (int)financial_safe);
+                  s_last_reopen_wait_log = t_now;
+               }
             }
          }
          break;
@@ -1578,9 +2014,17 @@ void ProcessFSM()
 
       case EDDY_STATE_REOPENING:
       {
-         if(CheckSafetyConditions())
+         double reopen_result = 0.0;
+         if(CheckSafetyConditions() &&
+            TryCalculateConsolidatedResult(g_day_start, t_now, reopen_result))
          {
+            g_financial_degraded = false;
             TransitionTo(EDDY_STATE_REOPENING);
+         }
+         else
+         {
+            g_current_state = EDDY_STATE_BLOCKED;
+            g_safe_to_operate = false;
          }
          break;
       }
@@ -1717,7 +2161,7 @@ int OnInit()
          g_t_trigger           = rec.t_trigger;
          g_t_unlock            = rec.t_unlock;
          g_protection_event_id = rec.protection_event_id;
-         g_safe_to_operate     = true; // Motor recuperado com integridade operacional e saudável
+         g_safe_to_operate     = false;
 
          // T03: Exposição residual aberta tem precedência absoluta
          if(PositionsTotal() > 0 || OrdersTotal() > 0)
@@ -1737,8 +2181,11 @@ int OnInit()
             else
             {
                // t_now >= g_t_unlock
-               if(CheckSafetyConditions())
+               double reopen_result = 0.0;
+               if(CheckSafetyConditions() &&
+                  TryCalculateConsolidatedResult(g_day_start, t_now, reopen_result))
                {
+                  g_financial_degraded = false;
                   // T02C: Reabertura imediata pós-restart: INIT -> REOPENING -> MONITORING
                   PrintFormat("[Disciplinador Trader][INFO] T02C: Bloqueio vencido e condições seguras. Conduzindo formalmente INIT -> REOPENING -> MONITORING.");
                   TransitionTo(EDDY_STATE_REOPENING);
@@ -1757,10 +2204,16 @@ int OnInit()
       {
          g_window_id           = rec.window_id;
          g_baseline            = rec.baseline;
-         g_safe_to_operate     = true;
+         g_t_trigger           = rec.t_trigger;
+         g_t_unlock            = rec.t_unlock;
+         g_protection_event_id = rec.protection_event_id;
+         g_safe_to_operate     = false;
          g_current_state       = EDDY_STATE_REOPENING;
-         if(CheckSafetyConditions())
+         double reopen_result = 0.0;
+         if(CheckSafetyConditions() &&
+            TryCalculateConsolidatedResult(g_day_start, t_now, reopen_result))
          {
+            g_financial_degraded = false;
             TransitionTo(EDDY_STATE_REOPENING);
          }
          else
@@ -1783,23 +2236,6 @@ int OnInit()
          }
          else
          {
-            // Mesmo dia operacional. Valida integridade de janela intradiária Jn (n >= 1)
-            if(rec.window_id >= 1)
-            {
-               if(!GlobalVariableCheck(GVKey("BASELINE")))
-               {
-                  // Postura Fail-Closed (W06-15)
-                  PrintFormat("[Disciplinador Trader][CRITICAL] (FAIL-CLOSED): Janela J%d ativa mas Baseline Bn ausente nas Global Variables! Operações retidas em INIT.",
-                              rec.window_id);
-                  g_current_state   = EDDY_STATE_INIT;
-                  g_safe_to_operate = false;
-                  PersistState();
-                  EventSetMillisecondTimer(InpTimerIntervalMs);
-                  UpdateHUD();
-                  return INIT_SUCCEEDED;
-               }
-            }
-
             g_window_id       = rec.window_id;
             g_baseline        = rec.baseline;
             g_current_state   = EDDY_STATE_MONITORING;
@@ -1822,15 +2258,24 @@ int OnInit()
    }
    else
    {
-      // Inicialização limpa (primeira vez na conta)
-      PrintFormat("[Disciplinador Trader][INFO] Inicialização limpa na conta %I64u. Iniciando J0 com B0=0.0", g_account_login);
-      g_current_state   = EDDY_STATE_MONITORING;
-      g_window_id       = 0;
-      g_baseline        = 0.0;
-      g_safe_to_operate = true;
+      if(g_persisted_state_corrupt)
+      {
+         PrintFormat("[Disciplinador Trader][CRITICAL] (FAIL-CLOSED): snapshot persistido presente, porem incompleto/corrompido. Retendo INIT sem sobrescrever a evidencia.");
+         g_current_state   = EDDY_STATE_INIT;
+         g_safe_to_operate = false;
+      }
+      else
+      {
+         // Inicialização limpa (primeira vez na conta)
+         PrintFormat("[Disciplinador Trader][INFO] Inicialização limpa na conta %I64u. Iniciando J0 com B0=0.0", g_account_login);
+         g_current_state   = EDDY_STATE_MONITORING;
+         g_window_id       = 0;
+         g_baseline        = 0.0;
+         g_safe_to_operate = true;
+      }
    }
 
-   if(!PersistState())
+   if(!g_persisted_state_corrupt && !PersistState())
    {
       PrintFormat("[Disciplinador Trader][CRITICAL] (FAIL-CLOSED): Falha ao persistir estado pós-inicialização! Retendo em INIT.");
       g_current_state   = EDDY_STATE_INIT;
@@ -1874,10 +2319,6 @@ void OnDeinit(const int reason)
    PrintFormat("[EddyTrader][INFO] EA descarregado da conta %I64u. Razão: %d", g_account_login, reason);
 }
 
-void OnTick()
-{
-   ProcessFSM();
-}
 
 void OnTimer()
 {
@@ -1889,41 +2330,43 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
 {
-   // Neutralização reativa imediata de intervenções manuais durante contenção ou bloqueio
+   if(!VerifyInstanceOwnership())
+      return;
+
+   // Observação de eventos durante contenção; reconciliação pelo timer, sem presumir origem manual.
    if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
    {
       if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
       {
-         if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
+         if((trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL) &&
+            PositionsTotal() > 0)
          {
-            PrintFormat("[EddyTrader][WARN] INTERVENÇÃO MANUAL DETECTADA em %s: Negócio #%I64u executado! Neutralizando imediatamente.",
-                        EnumToString(g_current_state), trans.deal);
-            ExecuteGlobalLiquidation(false);
+            // O callback apenas observa a exposição; não executa CTrade, FSM,
+            // nem modifica o cooldown de retentativas. OnTimer reconcilia.
+
+            if(ShouldLogContainmentWarning())
+               PrintFormat("[EddyTrader][WARN] Evento comercial com exposicao ativa detectado em %s (deal #%I64u). Reconciliacao agendada pela FSM.",
+                           EnumToString(g_current_state), trans.deal);
          }
       }
-      else if(trans.type == TRADE_TRANSACTION_ORDER_ADD)
+      else if(trans.type == TRADE_TRANSACTION_ORDER_ADD && OrdersTotal() > 0)
       {
-         PrintFormat("[EddyTrader][WARN] INTERVENÇÃO MANUAL DETECTADA em %s: Ordem pendente #%I64u adicionada! Cancelando imediatamente.",
-                     EnumToString(g_current_state), trans.order);
-         CancelPendingOrders(false);
+         // ORDER_ADD pode chegar antes de a ordem existir no inventário.
+         // Não cancelar no callback; OnTimer reconcilia respeitando o cooldown.
+
+         if(ShouldLogContainmentWarning())
+            PrintFormat("[EddyTrader][WARN] Evento de ordem com pendencia ativa detectado em %s (order #%I64u). Reconciliacao agendada pela FSM.",
+                        EnumToString(g_current_state), trans.order);
       }
    }
 
-   ProcessFSM();
 }
 
 void OnTrade()
 {
-   // Reconciliação secundária de integridade de inventário
-   if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING)
-   {
-      if(PositionsTotal() > 0 || OrdersTotal() > 0)
-      {
-         ExecuteGlobalLiquidation(false);
-      }
-   }
-
-   ProcessFSM();
+   // Nenhuma requisição comercial a partir de callbacks de negociação.
+   // O OnTimer executa ProcessFSM e neutraliza posições/ordens residuais.
+   // A validação de ownership continua dentro do ProcessFSM e do CTrade wrapper.
 }
 
 //+------------------------------------------------------------------+
@@ -1966,7 +2409,10 @@ void OnChartEvent(const int id,
       if(sparam == EDDY_UI_PREFIX + "Hud_Btn_Config" || sparam == EDDY_UI_PREFIX + "Btn_Config")
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         if(g_current_state == EDDY_STATE_MONITORING && g_safe_to_operate && g_is_owner)
+         if(g_current_state == EDDY_STATE_MONITORING &&
+            g_safe_to_operate &&
+            VerifyInstanceOwnership() &&
+            FinancialSnapshotAvailable())
          {
             if(g_config_ui_state == UI_STATE_IDLE)
                UI_OpenConfigDialog();
