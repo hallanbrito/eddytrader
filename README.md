@@ -10,6 +10,16 @@
 ![Tests](https://img.shields.io/badge/regression-81%2F81%20PASS-brightgreen)
 ![Visual Tests](https://img.shields.io/badge/visual%20tests-14%2F14%20PASS-brightgreen)
 
+## Entrega W10.4 — integração e validação inicial Demo (02/11/2026)
+
+**Entregue na `master`:** [PR #14](https://github.com/hallanbrito/eddytrader/pull/14), merge `f2ddbb3f8bcf6aec78f728a8c01cfdae3019c16c`.
+
+**Evidências:** MetaEditor 0 erros/0 warnings; regressão 81/81 PASS; harness financeiro modelado 18/18 PASS; smoke histórico do EA completo 22.735 ticks e 5.738 barras, PASS. Instalação de teste em MT5 ActivTrades identificada visualmente como `[DEMO]`, `MONITORING`, com ownership ativo e zero posições/ordens. **Não houve validação de liquidação efetiva pós-patch na corretora.**
+
+**Limite da entrega:** exclusivamente avaliação Demo. Os cenários empíricos de rejeição, parcial, pendentes, concorrência e restart continuam documentados na [Issue #12](https://github.com/hallanbrito/eddytrader/issues/12). Esta integração **não autoriza conta Real** nem certifica proteção contínua com terminal ou conexão indisponível. O binário de teste ainda apresenta `1.0.0-rc3`; **não existe release/tag/binário oficial RC4 homologado nesta entrega**. Não confundir o código W10.4 integrado com publicação de RC4.
+
+---
+
 ## Baixar
 
 **Versão atual:** `1.0.0-rc3` — Terceiro Release Candidate (HUD Adaptativo & Compatibilidade Account-Global).
@@ -229,16 +239,14 @@ O repositório mantém toda a trilha de engenharia e decisões do projeto:
 
 No Windows/PowerShell:
 
-```powershell
-./scripts/build.ps1
-```
-
-O build oficial deve terminar com:
+Abra `src/EddyTrader.mq5` no **MetaEditor do MT5 escolhido**, compile manualmente e confirme:
 
 ```text
 0 errors
 0 warnings
 ```
+
+**Cuidado:** o script legado `scripts/build.ps1` contém caminhos absolutos e **copia binários para uma instalação MT5 fixa**. Não o execute em ambientes de teste ou de conta Real sem revisar e adaptar previamente seus destinos. Para a W10.4, use apenas o **Strategy Tester** ou uma instalação explicitamente identificada como **Demo**, sem copiar arquivos para outras instâncias.
 
 ---
 
