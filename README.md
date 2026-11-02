@@ -10,23 +10,23 @@
 ![Tests](https://img.shields.io/badge/regression-81%2F81%20PASS-brightgreen)
 ![Visual Tests](https://img.shields.io/badge/visual%20tests-14%2F14%20PASS-brightgreen)
 
-## Entrega W10.4 — integração e validação inicial Demo (02/11/2026)
+## Release 1.0.0-rc3 — W10.4 integrada (02/11/2026)
 
 **Entregue na `master`:** [PR #14](https://github.com/hallanbrito/eddytrader/pull/14), merge `f2ddbb3f8bcf6aec78f728a8c01cfdae3019c16c`.
 
 **Evidências:** MetaEditor 0 erros/0 warnings; regressão 81/81 PASS; harness financeiro modelado 18/18 PASS; smoke histórico do EA completo 22.735 ticks e 5.738 barras, PASS. Instalação de teste em MT5 ActivTrades identificada visualmente como `[DEMO]`, `MONITORING`, com ownership ativo e zero posições/ordens. **Não houve validação de liquidação efetiva pós-patch na corretora.**
 
-**Limite da entrega:** exclusivamente avaliação Demo. Os cenários empíricos de rejeição, parcial, pendentes, concorrência e restart continuam documentados na [Issue #12](https://github.com/hallanbrito/eddytrader/issues/12). Esta integração **não autoriza conta Real** nem certifica proteção contínua com terminal ou conexão indisponível. O binário de teste ainda apresenta `1.0.0-rc3`; **não existe release/tag/binário oficial RC4 homologado nesta entrega**. Não confundir o código W10.4 integrado com publicação de RC4.
+**Entrega consolidada na RC3:** recomendamos testar primeiro em **conta Demo antes de utilizar em conta Real**. Em caso de erro, [relate uma Issue](https://github.com/hallanbrito/eddytrader/issues) para análise. Os cenários empíricos adicionais continuam registrados na [Issue #12](https://github.com/hallanbrito/eddytrader/issues/12).
 
 ---
 
 ## Baixar
 
-**Versão atual:** `1.0.0-rc3` — Terceiro Release Candidate (HUD Adaptativo & Compatibilidade Account-Global).
+**Versão atual:** `1.0.0-rc3` — Release Candidate 3 publicado em 02/11/2026, incluindo as correções W10.4.
 
-- **[Abrir página de Releases](https://github.com/hallanbrito/eddytrader/releases)** — local recomendado para baixar o `EddyTrader.ex5` quando o asset binário estiver publicado.
+- **[Release 1.0.0-rc3](https://github.com/hallanbrito/eddytrader/releases/tag/v1.0.0-rc3)** — página da versão (arquivos de código-fonte para compilar no MetaEditor; não há binário `.ex5` anexado nesta etapa).
 - **[Baixar o código-fonte EddyTrader.mq5](src/EddyTrader.mq5)** — alternativa para quem prefere compilar no MetaEditor.
-- **[Release Notes 1.0.0-rc3](docs/21-RELEASE-NOTES-1.0.0-rc3.md)** — notas de versão detalhadas do RC3.
+- **[Notas de entrega 1.0.0-rc3 (02/11/2026)](docs/RELEASE-1.0.0-rc3.md)** — novidades da versão, verificações e recomendação de uso.
 - **[Instalação em 2 minutos](docs/18-QUICKSTART.md)** — passo a passo direto ao ponto.
 
 > [!IMPORTANT]
@@ -186,7 +186,7 @@ O Disciplinador Trader foi homologado tecnicamente no MetaTrader 5 build 6193.
 ## Status de qualidade
 
 ```text
-Versão:          1.0.0-rc3 (Preparada, Não Publicada)
+Versão:          1.0.0-rc3 (Código W10.4 integrado; release publicado em 02/11/2026)
 Build:           0 errors / 0 warnings (9 alvos compilados)
 Regressão:       81 / 81 PASS (82 asserções formais)
 Teste Visual:    14 / 14 PASS (Automação de interface no Strategy Tester)
@@ -200,7 +200,7 @@ ADR 0005:        Proposed
 
 Detalhes:
 
-- [Release Notes 1.0.0-rc3](docs/21-RELEASE-NOTES-1.0.0-rc3.md)
+- [Notas de entrega 1.0.0-rc3 (02/11/2026)](docs/RELEASE-1.0.0-rc3.md)
 - [Release Notes 1.0.0-rc2](docs/20-RELEASE-NOTES-1.0.0-rc2.md)
 - [Release Notes 1.0.0-rc1](docs/17-RELEASE-NOTES-1.0.0-rc1.md)
 - [Homologação operacional W07](docs/14-HOMOLOGACAO-W07.md)
