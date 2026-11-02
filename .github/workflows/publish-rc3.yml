@@ -1,0 +1,43 @@
+name: Publish EddyTrader 1.0.0-rc3
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/publish-rc3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify RC3 source and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#define EDDY_VERSION      "1.0.0-rc3"' src/EddyTrader.mq5
+          test -s docs/RELEASE-1.0.0-rc3.md
+      - name: Publish pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.0-rc3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.0-rc3 already exists; no duplicate publication."
+            exit 0
+          fi
+          gh release create v1.0.0-rc3 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "EddyTrader 1.0.0-rc3" \
+            --notes-file docs/RELEASE-1.0.0-rc3.md \
+            --prerelease
