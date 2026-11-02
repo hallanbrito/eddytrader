@@ -125,6 +125,7 @@ bool                 g_is_owner               = false;
 CTrade               g_trade;
 ulong                g_next_liquidation_attempt_ms = 0;
 ulong                g_next_cancel_attempt_ms      = 0;
+datetime             g_last_containment_warning    = 0;
 
 //+------------------------------------------------------------------+
 //| Funções Auxiliares de Tempo e Servidor                           |
@@ -713,6 +714,19 @@ bool CheckSafetyConditions()
    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
       return false;
    return true;
+}
+
+bool ShouldLogContainmentWarning()
+{
+   datetime now = TimeCurrent();
+   if(g_last_containment_warning == 0 ||
+      now < g_last_containment_warning ||
+      now - g_last_containment_warning >= 5)
+   {
+      g_last_containment_warning = now;
+      return true;
+   }
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -1960,7 +1974,8 @@ void ProcessFSM()
          // Neutralização de intervenções residuais durante o bloqueio
          if(PositionsTotal() > 0 || OrdersTotal() > 0)
          {
-            PrintFormat("[EddyTrader][WARN] ALERTA: Exposição detectada durante BLOCKED! Executando neutralização.");
+            if(ShouldLogContainmentWarning())
+               PrintFormat("[EddyTrader][WARN] ALERTA: Exposição detectada durante BLOCKED! Executando neutralização.");
             ExecuteGlobalLiquidation(true);
          }
 
@@ -2304,10 +2319,6 @@ void OnDeinit(const int reason)
    PrintFormat("[EddyTrader][INFO] EA descarregado da conta %I64u. Razão: %d", g_account_login, reason);
 }
 
-void OnTick()
-{
-   ProcessFSM();
-}
 
 void OnTimer()
 {
@@ -2322,44 +2333,40 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    if(!VerifyInstanceOwnership())
       return;
 
-   // Neutralização reativa imediata de intervenções manuais durante contenção ou bloqueio
+   // Observação de eventos durante contenção; reconciliação pelo timer, sem presumir origem manual.
    if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING || g_current_state == EDDY_STATE_PROTECTION_TRIGGERED)
    {
       if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
       {
-         if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
+         if((trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL) &&
+            PositionsTotal() > 0)
          {
-            PrintFormat("[EddyTrader][WARN] INTERVENÇÃO MANUAL DETECTADA em %s: Negócio #%I64u executado! Neutralizando imediatamente.",
-                        EnumToString(g_current_state), trans.deal);
-            ExecuteGlobalLiquidation(true);
+            // O callback apenas observa a exposição; não executa CTrade, FSM,
+            // nem modifica o cooldown de retentativas. OnTimer reconcilia.
+
+            if(ShouldLogContainmentWarning())
+               PrintFormat("[EddyTrader][WARN] Evento comercial com exposicao ativa detectado em %s (deal #%I64u). Reconciliacao agendada pela FSM.",
+                           EnumToString(g_current_state), trans.deal);
          }
       }
-      else if(trans.type == TRADE_TRANSACTION_ORDER_ADD)
+      else if(trans.type == TRADE_TRANSACTION_ORDER_ADD && OrdersTotal() > 0)
       {
-         PrintFormat("[EddyTrader][WARN] INTERVENÇÃO MANUAL DETECTADA em %s: Ordem pendente #%I64u adicionada! Cancelando imediatamente.",
-                     EnumToString(g_current_state), trans.order);
-         CancelPendingOrders(true);
+         // ORDER_ADD pode chegar antes de a ordem existir no inventário.
+         // Não cancelar no callback; OnTimer reconcilia respeitando o cooldown.
+
+         if(ShouldLogContainmentWarning())
+            PrintFormat("[EddyTrader][WARN] Evento de ordem com pendencia ativa detectado em %s (order #%I64u). Reconciliacao agendada pela FSM.",
+                        EnumToString(g_current_state), trans.order);
       }
    }
 
-   ProcessFSM();
 }
 
 void OnTrade()
 {
-   if(!VerifyInstanceOwnership())
-      return;
-
-   // Reconciliação secundária de integridade de inventário
-   if(g_current_state == EDDY_STATE_BLOCKED || g_current_state == EDDY_STATE_LIQUIDATING)
-   {
-      if(PositionsTotal() > 0 || OrdersTotal() > 0)
-      {
-         ExecuteGlobalLiquidation(true);
-      }
-   }
-
-   ProcessFSM();
+   // Nenhuma requisição comercial a partir de callbacks de negociação.
+   // O OnTimer executa ProcessFSM e neutraliza posições/ordens residuais.
+   // A validação de ownership continua dentro do ProcessFSM e do CTrade wrapper.
 }
 
 //+------------------------------------------------------------------+
