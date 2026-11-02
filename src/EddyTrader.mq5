@@ -6,12 +6,12 @@
 #property copyright   "Copyright 2026, EddyTrader Team"
 #property link        "https://eddytrader.io"
 #property version     "1.00"
-#property description "Disciplinador Trader 1.0.0-rc3 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
+#property description "Disciplinador Trader 1.0.0-rc4 - Núcleo Autônomo de Proteção de Capital e Gerenciador de Perda Diária"
 #property strict
 
 //--- Definições Formais do Produto e Versão
 #define EDDY_PRODUCT_NAME "Disciplinador Trader"
-#define EDDY_VERSION      "1.0.0-rc3"
+#define EDDY_VERSION      "1.0.0-rc4"
 #define EDDY_PURPOSE      "Guardião de Disciplina Operacional e Limite de Perda Diária (MQL5 Nativo)"
 
 //--- Definições de Interface Gráfica (HUD)
